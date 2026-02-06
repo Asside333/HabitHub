@@ -13,5 +13,8 @@ const INITIAL_STATE = {
 const UI_CONFIG = {
   countUpDurationMs: 320,
   toastDurationMs: 1800,
-  confettiDurationMs: 780,
+  confettiDurationMs: 820,
+  confettiPieces: 16,
+  questPopDurationMs: 320,
+  questGlowDurationMs: 540,
 };

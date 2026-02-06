@@ -10,11 +10,15 @@ const sessionProgressBar = document.getElementById("session-progress-bar");
 const progressTrack = document.querySelector(".progress-track");
 const toastRoot = document.getElementById("toast-root");
 const confettiLayer = document.getElementById("confetti-layer");
+const levelBadge = document.getElementById("level-badge");
 
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 let state = loadState();
 let audioContext = null;
+
+// Set utilisé pour éviter les double-clics sur une quête pendant le traitement.
+const processingQuestIds = new Set();
 
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
@@ -43,6 +47,15 @@ function prefersReducedMotion() {
   return reducedMotionQuery.matches;
 }
 
+function getLevelFromXp(xp) {
+  // Progression simple: 100 XP = 1 niveau.
+  return Math.floor(xp / 100) + 1;
+}
+
+function renderLevel() {
+  levelBadge.textContent = `Lv ${getLevelFromXp(state.xp)}`;
+}
+
 function animateValue(element, from, to, durationMs = UI_CONFIG.countUpDurationMs) {
   if (prefersReducedMotion() || from === to) {
     element.textContent = String(to);
@@ -68,6 +81,7 @@ function animateValue(element, from, to, durationMs = UI_CONFIG.countUpDurationM
 function renderStats(previous = state) {
   animateValue(xpValue, previous.xp, state.xp);
   animateValue(goldValue, previous.gold, state.gold);
+  renderLevel();
 }
 
 function renderSessionProgress() {
@@ -123,23 +137,58 @@ function playDing() {
 function spawnConfetti() {
   if (prefersReducedMotion()) return;
 
-  const colors = ["#58cc6c", "#4f8dff", "#f6c54b", "#ff7e8c"];
+  const colors = ["#58cc6c", "#7ca6ff", "#ffd45e", "#ff8598"];
 
-  for (let i = 0; i < 18; i += 1) {
+  for (let i = 0; i < UI_CONFIG.confettiPieces; i += 1) {
     const piece = document.createElement("span");
     piece.className = "confetti";
     piece.style.background = colors[i % colors.length];
-    piece.style.left = `${10 + Math.random() * 80}%`;
-    piece.style.top = `${10 + Math.random() * 20}%`;
+    piece.style.left = `${8 + Math.random() * 84}%`;
+    piece.style.top = `${12 + Math.random() * 20}%`;
     piece.style.animationDelay = `${Math.random() * 120}ms`;
     confettiLayer.append(piece);
 
-    setTimeout(() => piece.remove(), UI_CONFIG.confettiDurationMs + 200);
+    setTimeout(() => piece.remove(), UI_CONFIG.confettiDurationMs + 180);
   }
 }
 
+function getQuestIconSvg(questId) {
+  const icons = {
+    water:
+      '<svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M12 2c3.2 4 6.5 7.4 6.5 11.2A6.5 6.5 0 1 1 5.5 13.2C5.5 9.4 8.8 6 12 2z"/></svg>',
+    walk:
+      '<svg viewBox="0 0 24 24" role="img" aria-hidden="true"><circle cx="14" cy="5" r="2.5"/><path d="M7 13.5 11 9l2 1.6V15l2.6 4H13l-2.4-3.6L8.4 18H6l2.2-4.5L7 13.5z"/></svg>',
+    read:
+      '<svg viewBox="0 0 24 24" role="img" aria-hidden="true"><path d="M4 5.5C4 4.7 4.7 4 5.5 4H11c1.2 0 2.3.4 3 1.2.7-.8 1.8-1.2 3-1.2h1.5c.8 0 1.5.7 1.5 1.5V18c0 .6-.4 1-1 1H17c-1.2 0-2.3.4-3 1.2-.7-.8-1.8-1.2-3-1.2H5c-.6 0-1-.4-1-1V5.5z"/></svg>',
+  };
+
+  return icons[questId] || '<svg viewBox="0 0 24 24" role="img" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>';
+}
+
+function markQuestAsCompleted(quest, questItem, button, title) {
+  questItem.classList.add("is-completed", "pop", "glow");
+  setTimeout(() => questItem.classList.remove("pop"), UI_CONFIG.questPopDurationMs);
+  setTimeout(() => questItem.classList.remove("glow"), UI_CONFIG.questGlowDurationMs);
+
+  title.textContent = `✅ ${quest.name}`;
+  button.textContent = "Complétée";
+  button.disabled = true;
+  button.classList.add("btn-completed");
+}
+
 function completeQuest(quest, questItem, button, title) {
-  if (state.completedQuestIds.includes(quest.id)) return;
+  // Anti double-clic immédiat.
+  button.disabled = true;
+
+  if (processingQuestIds.has(quest.id)) return;
+  processingQuestIds.add(quest.id);
+
+  // Idempotence: si déjà complétée, on ne donne plus de récompense.
+  if (state.completedQuestIds.includes(quest.id)) {
+    markQuestAsCompleted(quest, questItem, button, title);
+    processingQuestIds.delete(quest.id);
+    return;
+  }
 
   const previous = { ...state };
   state.xp += quest.xp;
@@ -149,18 +198,13 @@ function completeQuest(quest, questItem, button, title) {
   saveState();
   renderStats(previous);
   renderSessionProgress();
-
-  questItem.classList.add("is-completed", "pop");
-  setTimeout(() => questItem.classList.remove("pop"), 380);
-
-  title.textContent = `✅ ${quest.name}`;
-  button.textContent = "Terminé ✓";
-  button.disabled = true;
-  button.classList.add("btn-completed");
+  markQuestAsCompleted(quest, questItem, button, title);
 
   showToast(`+${quest.xp} XP • +${quest.gold} Gold`);
   spawnConfetti();
   playDing();
+
+  processingQuestIds.delete(quest.id);
 }
 
 function renderQuests() {
@@ -171,7 +215,13 @@ function renderQuests() {
 
     const item = document.createElement("li");
     item.className = "quest";
-    if (isCompleted) item.classList.add("is-completed");
+
+    const questMain = document.createElement("div");
+    questMain.className = "quest-main";
+
+    const icon = document.createElement("div");
+    icon.className = "quest-icon";
+    icon.innerHTML = getQuestIconSvg(quest.id);
 
     const textWrap = document.createElement("div");
 
@@ -192,28 +242,39 @@ function renderQuests() {
 
     chips.append(xpChip, goldChip);
     textWrap.append(title, chips);
+    questMain.append(icon, textWrap);
 
     const doneBtn = document.createElement("button");
     doneBtn.type = "button";
     doneBtn.className = "btn btn-primary";
-    doneBtn.textContent = isCompleted ? "Terminé ✓" : "Terminer";
+    doneBtn.textContent = isCompleted ? "Complétée" : "Terminer";
     doneBtn.disabled = isCompleted;
-    if (isCompleted) doneBtn.classList.add("btn-completed");
+
+    if (isCompleted) {
+      item.classList.add("is-completed");
+      doneBtn.classList.add("btn-completed");
+    }
 
     doneBtn.addEventListener("click", () => completeQuest(quest, item, doneBtn, title));
 
-    item.append(textWrap, doneBtn);
+    item.append(questMain, doneBtn);
     questsList.append(item);
   }
 }
 
 resetBtn.addEventListener("click", () => {
+  const accepted = window.confirm("Redémarrer la session ? Toutes les stats et quêtes seront remises à zéro.");
+  if (!accepted) return;
+
+  const previous = { ...state };
   state = { ...INITIAL_STATE };
+  processingQuestIds.clear();
+
   saveState();
-  renderStats({ ...state });
+  renderStats(previous);
   renderSessionProgress();
   renderQuests();
-  showToast("Progression réinitialisée");
+  showToast("Session réinitialisée");
 });
 
 renderStats();
