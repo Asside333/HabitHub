@@ -1,20 +1,20 @@
 const STORAGE_KEY = "habithub-state-v2";
 const LEGACY_STORAGE_KEY = "habithub-state-v1";
 
-const xpValue = document.getElementById("xp-value");
-const goldValue = document.getElementById("gold-value");
-const questsList = document.getElementById("quests-list");
-const resetBtn = document.getElementById("reset-btn");
-const sessionProgressText = document.getElementById("session-progress-text");
-const sessionProgressBar = document.getElementById("session-progress-bar");
-const progressTrack = document.querySelector(".progress-track");
-const toastRoot = document.getElementById("toast-root");
-const confettiLayer = document.getElementById("confetti-layer");
-const levelBadge = document.getElementById("level-badge");
+let xpValue;
+let goldValue;
+let questsList;
+let resetBtn;
+let sessionProgressText;
+let sessionProgressBar;
+let progressTrack;
+let toastRoot;
+let confettiLayer;
+let levelBadge;
 
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-let state = loadState();
+let state;
 let audioContext = null;
 
 // Set utilisé pour éviter les double-clics sur une quête pendant le traitement.
@@ -23,7 +23,7 @@ const processingQuestIds = new Set();
 function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
 
-  if (!raw) return { ...INITIAL_STATE };
+  if (!raw) return createInitialState();
 
   try {
     const parsed = JSON.parse(raw);
@@ -35,8 +35,17 @@ function loadState() {
         : [],
     };
   } catch {
-    return { ...INITIAL_STATE };
+    return createInitialState();
   }
+}
+
+function createInitialState() {
+  // Important: retourne un nouveau tableau pour éviter de muter INITIAL_STATE par référence.
+  return {
+    xp: INITIAL_STATE.xp,
+    gold: INITIAL_STATE.gold,
+    completedQuestIds: [],
+  };
 }
 
 function saveState() {
@@ -177,9 +186,6 @@ function markQuestAsCompleted(quest, questItem, button, title) {
 }
 
 function completeQuest(quest, questItem, button, title) {
-  // Anti double-clic immédiat.
-  button.disabled = true;
-
   if (processingQuestIds.has(quest.id)) return;
   processingQuestIds.add(quest.id);
 
@@ -189,6 +195,9 @@ function completeQuest(quest, questItem, button, title) {
     processingQuestIds.delete(quest.id);
     return;
   }
+
+  // Anti double-clic immédiat uniquement pour un clic valide.
+  button.disabled = true;
 
   const previous = { ...state };
   state.xp += quest.xp;
@@ -262,21 +271,43 @@ function renderQuests() {
   }
 }
 
-resetBtn.addEventListener("click", () => {
+function resetSession() {
   const accepted = window.confirm("Redémarrer la session ? Toutes les stats et quêtes seront remises à zéro.");
   if (!accepted) return;
 
   const previous = { ...state };
-  state = { ...INITIAL_STATE };
-  processingQuestIds.clear();
 
-  saveState();
+  // Régression critique: INITIAL_STATE était muté à cause d'une copie superficielle.
+  // Ici on réinitialise la RAM + le stockage de manière explicite.
+  state = createInitialState();
+  processingQuestIds.clear();
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+
   renderStats(previous);
   renderSessionProgress();
   renderQuests();
   showToast("Session réinitialisée");
-});
+}
 
-renderStats();
-renderSessionProgress();
-renderQuests();
+function initGame() {
+  xpValue = document.getElementById("xp-value");
+  goldValue = document.getElementById("gold-value");
+  questsList = document.getElementById("quests-list");
+  resetBtn = document.getElementById("reset-btn");
+  sessionProgressText = document.getElementById("session-progress-text");
+  sessionProgressBar = document.getElementById("session-progress-bar");
+  progressTrack = document.querySelector(".progress-track");
+  toastRoot = document.getElementById("toast-root");
+  confettiLayer = document.getElementById("confetti-layer");
+  levelBadge = document.getElementById("level-badge");
+
+  state = loadState();
+  resetBtn.addEventListener("click", resetSession);
+
+  renderStats();
+  renderSessionProgress();
+  renderQuests();
+}
+
+document.addEventListener("DOMContentLoaded", initGame);
