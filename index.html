@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HabitHub — MVP offline</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="header">
+        <h1>HabitHub</h1>
+        <p class="subtitle">MVP jouable hors ligne</p>
+      </header>
+
+      <section class="panel stats-panel" aria-labelledby="stats-title">
+        <h2 id="stats-title">Stats</h2>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="label">XP</span>
+            <strong id="xp-value">0</strong>
+          </div>
+          <div class="stat-card">
+            <span class="label">Gold</span>
+            <strong id="gold-value">0</strong>
+          </div>
+        </div>
+        <button id="reset-btn" class="btn btn-danger" type="button">Reset</button>
+      </section>
+
+      <section class="panel" aria-labelledby="quests-title">
+        <h2 id="quests-title">Quêtes</h2>
+        <ul id="quests-list" class="quests-list"></ul>
+      </section>
+    </main>
+
+    <script src="data.js"></script>
+    <script src="game.js"></script>
+  </body>
+</html>
