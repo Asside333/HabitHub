@@ -174,46 +174,60 @@ function getQuestIconSvg(questId) {
   return icons[questId] || '<svg viewBox="0 0 24 24" role="img" aria-hidden="true"><circle cx="12" cy="12" r="8"/></svg>';
 }
 
-function markQuestAsCompleted(quest, questItem, button, title) {
-  questItem.classList.add("is-completed", "pop", "glow");
-  setTimeout(() => questItem.classList.remove("pop"), UI_CONFIG.questPopDurationMs);
-  setTimeout(() => questItem.classList.remove("glow"), UI_CONFIG.questGlowDurationMs);
-
-  title.textContent = `✅ ${quest.name}`;
-  button.textContent = "Complétée";
-  button.disabled = true;
-  button.classList.add("btn-completed");
+function updateQuestButtonState(button, isCompleted) {
+  button.textContent = isCompleted ? "Annuler" : "Terminer";
+  button.classList.toggle("btn-completed", isCompleted);
+  button.setAttribute("aria-pressed", String(isCompleted));
 }
 
-function completeQuest(quest, questItem, button, title) {
-  if (processingQuestIds.has(quest.id)) return;
-  processingQuestIds.add(quest.id);
-
-  // Idempotence: si déjà complétée, on ne donne plus de récompense.
-  if (state.completedQuestIds.includes(quest.id)) {
-    markQuestAsCompleted(quest, questItem, button, title);
-    processingQuestIds.delete(quest.id);
-    return;
-  }
-
-  // Anti double-clic immédiat uniquement pour un clic valide.
-  button.disabled = true;
-
+function applyDelta({ xpDelta = 0, goldDelta = 0 }) {
   const previous = { ...state };
-  state.xp += quest.xp;
-  state.gold += quest.gold;
-  state.completedQuestIds.push(quest.id);
+  state.xp = Math.max(0, state.xp + xpDelta);
+  state.gold = Math.max(0, state.gold + goldDelta);
 
-  saveState();
   renderStats(previous);
   renderSessionProgress();
-  markQuestAsCompleted(quest, questItem, button, title);
+  renderQuests();
+}
 
-  showToast(`+${quest.xp} XP • +${quest.gold} Gold`);
-  spawnConfetti();
-  playDing();
+function animateQuestToggle(questItem) {
+  questItem.classList.add("pop", "glow");
+  setTimeout(() => questItem.classList.remove("pop"), UI_CONFIG.questPopDurationMs);
+  setTimeout(() => questItem.classList.remove("glow"), UI_CONFIG.questGlowDurationMs);
+}
 
-  processingQuestIds.delete(quest.id);
+function toggleQuest(questId) {
+  if (processingQuestIds.has(questId)) return;
+
+  const quest = QUESTS.find((entry) => entry.id === questId);
+  if (!quest) return;
+
+  processingQuestIds.add(questId);
+
+  const isCompleted = state.completedQuestIds.includes(questId);
+
+  if (isCompleted) {
+    state.completedQuestIds = state.completedQuestIds.filter((id) => id !== questId);
+    applyDelta({ xpDelta: -quest.xp, goldDelta: -quest.gold });
+    showToast(`-${quest.xp} XP • -${quest.gold} Gold`);
+  } else {
+    state.completedQuestIds.push(questId);
+    applyDelta({ xpDelta: quest.xp, goldDelta: quest.gold });
+    showToast(`+${quest.xp} XP • +${quest.gold} Gold`);
+    spawnConfetti();
+    playDing();
+  }
+
+  saveState();
+
+  const questItem = questsList.querySelector(`[data-quest-id="${questId}"]`);
+  if (questItem) {
+    animateQuestToggle(questItem);
+  }
+
+  setTimeout(() => {
+    processingQuestIds.delete(questId);
+  }, UI_CONFIG.questToggleCooldownMs);
 }
 
 function renderQuests() {
@@ -224,6 +238,7 @@ function renderQuests() {
 
     const item = document.createElement("li");
     item.className = "quest";
+    item.dataset.questId = quest.id;
 
     const questMain = document.createElement("div");
     questMain.className = "quest-main";
@@ -256,15 +271,13 @@ function renderQuests() {
     const doneBtn = document.createElement("button");
     doneBtn.type = "button";
     doneBtn.className = "btn btn-primary";
-    doneBtn.textContent = isCompleted ? "Complétée" : "Terminer";
-    doneBtn.disabled = isCompleted;
 
     if (isCompleted) {
       item.classList.add("is-completed");
-      doneBtn.classList.add("btn-completed");
     }
 
-    doneBtn.addEventListener("click", () => completeQuest(quest, item, doneBtn, title));
+    updateQuestButtonState(doneBtn, isCompleted);
+    doneBtn.addEventListener("click", () => toggleQuest(quest.id));
 
     item.append(questMain, doneBtn);
     questsList.append(item);
