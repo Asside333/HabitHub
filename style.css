@@ -360,7 +360,6 @@ h1 {
 }
 
 .btn:disabled {
-  cursor: not-allowed;
   opacity: 0.7;
 }
 
@@ -383,8 +382,12 @@ h1 {
 }
 
 .btn-completed {
-  color: #f2fff6;
-  background: #3ea963;
+  color: #e8f0ff;
+  background: #4368b8;
+}
+
+.btn-completed:hover {
+  filter: brightness(1.06);
 }
 
 .toast-root {

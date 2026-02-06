@@ -17,4 +17,5 @@ const UI_CONFIG = {
   confettiPieces: 16,
   questPopDurationMs: 320,
   questGlowDurationMs: 540,
+  questToggleCooldownMs: 260,
 };
