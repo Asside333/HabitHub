@@ -7,32 +7,67 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="container">
-      <header class="header">
-        <h1>HabitHub</h1>
-        <p class="subtitle">MVP jouable hors ligne</p>
+    <main class="app-shell">
+      <header class="topbar" aria-label="En-tête de l'application">
+        <div>
+          <h1>HabitHub</h1>
+          <p class="subtitle">Ton coach de mini-quêtes, 100% hors ligne</p>
+        </div>
+        <span class="badge" aria-label="Version MVP offline">MVP • Offline</span>
       </header>
 
-      <section class="panel stats-panel" aria-labelledby="stats-title">
-        <h2 id="stats-title">Stats</h2>
+      <section class="stats" aria-labelledby="stats-title">
+        <div class="stats-head">
+          <h2 id="stats-title">Progression</h2>
+          <button id="reset-btn" class="btn btn-danger" type="button">Reset</button>
+        </div>
+
         <div class="stats-grid">
-          <div class="stat-card">
-            <span class="label">XP</span>
-            <strong id="xp-value">0</strong>
+          <article class="stat-card" aria-label="Points d'expérience">
+            <div class="stat-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <path d="M12 2 9.2 8.1 2.6 9l4.9 4.6-1.2 6.4L12 16.8 17.7 20l-1.2-6.4L21.4 9l-6.6-.9z" />
+              </svg>
+            </div>
+            <div>
+              <p class="label">XP</p>
+              <strong id="xp-value" class="counter">0</strong>
+            </div>
+          </article>
+
+          <article class="stat-card" aria-label="Pièces d'or">
+            <div class="stat-icon gold" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img" focusable="false">
+                <circle cx="12" cy="12" r="8" />
+                <path d="M9.2 10.1c0-1.1.9-1.9 2.6-1.9 1.4 0 2.5.5 3.2 1.1l-1 1.6c-.6-.5-1.3-.8-2.1-.8-.7 0-1.1.2-1.1.6 0 .4.5.6 1.9 1 1.8.5 2.8 1.1 2.8 2.7 0 1.8-1.4 2.8-3.4 2.8-1.6 0-3-.5-3.9-1.4l1.1-1.5c.7.6 1.6 1.1 2.7 1.1.8 0 1.2-.2 1.2-.7 0-.4-.5-.6-1.8-1-1.9-.5-3-1.2-3-2.6z" />
+              </svg>
+            </div>
+            <div>
+              <p class="label">Gold</p>
+              <strong id="gold-value" class="counter">0</strong>
+            </div>
+          </article>
+        </div>
+
+        <div class="session-progress" aria-live="polite">
+          <div class="progress-label-row">
+            <p class="label">Quêtes complétées (session)</p>
+            <strong id="session-progress-text">0 / 0</strong>
           </div>
-          <div class="stat-card">
-            <span class="label">Gold</span>
-            <strong id="gold-value">0</strong>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+            <div id="session-progress-bar" class="progress-fill"></div>
           </div>
         </div>
-        <button id="reset-btn" class="btn btn-danger" type="button">Reset</button>
       </section>
 
-      <section class="panel" aria-labelledby="quests-title">
-        <h2 id="quests-title">Quêtes</h2>
+      <section class="quests-section" aria-labelledby="quests-title">
+        <h2 id="quests-title">Quêtes du jour</h2>
         <ul id="quests-list" class="quests-list"></ul>
       </section>
     </main>
+
+    <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
+    <div id="confetti-layer" class="confetti-layer" aria-hidden="true"></div>
 
     <script src="data.js"></script>
     <script src="game.js"></script>

@@ -7,4 +7,11 @@ const QUESTS = [
 const INITIAL_STATE = {
   xp: 0,
   gold: 0,
+  completedQuestIds: [],
+};
+
+const UI_CONFIG = {
+  countUpDurationMs: 320,
+  toastDurationMs: 1800,
+  confettiDurationMs: 780,
 };
