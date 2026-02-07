@@ -8,9 +8,17 @@ let resetBtn;
 let sessionProgressText;
 let sessionProgressBar;
 let progressTrack;
+let levelProgressText;
+let levelProgressBar;
+let levelProgressTrack;
+let levelProgressRemaining;
 let toastRoot;
 let confettiLayer;
 let levelBadge;
+let levelUpOverlay;
+let levelUpTitle;
+let levelUpMessage;
+let levelUpContinueBtn;
 
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -27,9 +35,16 @@ function loadState() {
 
   try {
     const parsed = JSON.parse(raw);
+    const safeXp = Math.max(0, Number(parsed.xp) || 0);
+    const safeTotalXp = Math.max(0, Number(parsed.totalXp ?? parsed.xp) || 0);
+    const levelProgress = computeLevelProgress(safeTotalXp);
+    const safeLevel = Math.max(levelProgress.level, Number(parsed.level) || 1);
+
     return {
-      xp: Number(parsed.xp) || 0,
-      gold: Number(parsed.gold) || 0,
+      xp: safeXp,
+      totalXp: safeTotalXp,
+      level: safeLevel,
+      gold: Math.max(0, Number(parsed.gold) || 0),
       completedQuestIds: Array.isArray(parsed.completedQuestIds)
         ? parsed.completedQuestIds.filter((id) => typeof id === "string")
         : [],
@@ -43,6 +58,8 @@ function createInitialState() {
   // Important: retourne un nouveau tableau pour éviter de muter INITIAL_STATE par référence.
   return {
     xp: INITIAL_STATE.xp,
+    totalXp: INITIAL_STATE.totalXp,
+    level: INITIAL_STATE.level,
     gold: INITIAL_STATE.gold,
     completedQuestIds: [],
   };
@@ -56,13 +73,116 @@ function prefersReducedMotion() {
   return reducedMotionQuery.matches;
 }
 
-function getLevelFromXp(xp) {
-  // Progression simple: 100 XP = 1 niveau.
-  return Math.floor(xp / 100) + 1;
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function xpForNextLevel(level) {
+  const safeLevel = Math.max(1, Number(level) || 1);
+  return Math.max(1, Math.round(PROGRESSION.BASE_XP * PROGRESSION.GROWTH ** (safeLevel - 1)));
+}
+
+function computeLevelProgress(totalXp) {
+  const safeTotalXp = Math.max(0, Math.floor(Number(totalXp) || 0));
+  let level = 1;
+  let remainingXp = safeTotalXp;
+
+  while (remainingXp >= xpForNextLevel(level)) {
+    remainingXp -= xpForNextLevel(level);
+    level += 1;
+  }
+
+  const xpNeeded = xpForNextLevel(level);
+  const xpIntoLevel = remainingXp;
+  const progress = clamp(xpIntoLevel / xpNeeded, 0, 1);
+
+  return {
+    level,
+    xpIntoLevel,
+    xpNeeded,
+    progress,
+  };
+}
+
+function xpRequiredToReachLevel(level) {
+  let required = 0;
+  for (let currentLevel = 1; currentLevel < level; currentLevel += 1) {
+    required += xpForNextLevel(currentLevel);
+  }
+  return required;
+}
+
+function computeDisplayedProgress(level, totalXp) {
+  const safeLevel = Math.max(1, Number(level) || 1);
+  const safeTotalXp = Math.max(0, Math.floor(Number(totalXp) || 0));
+  const xpNeeded = xpForNextLevel(safeLevel);
+  const baseline = xpRequiredToReachLevel(safeLevel);
+  const xpIntoLevel = clamp(safeTotalXp - baseline, 0, xpNeeded);
+
+  return {
+    xpIntoLevel,
+    xpNeeded,
+    progress: clamp(xpIntoLevel / xpNeeded, 0, 1),
+  };
+}
+
+function getLevelUpGoldBonus(level) {
+  return Math.max(0, PROGRESSION.LEVEL_UP_GOLD_BASE_BONUS + PROGRESSION.LEVEL_UP_GOLD_PER_LEVEL * (level - 1));
+}
+
+function showLevelUpOverlay(newLevel, levelsGained, goldBonus) {
+  const gainedText = levelsGained > 1 ? `(+${levelsGained} niveaux)` : "";
+  levelUpTitle.textContent = `Niveau ${newLevel} ! ${gainedText}`.trim();
+  levelUpMessage.textContent = `+${goldBonus} Gold`;
+  levelUpOverlay.hidden = false;
+}
+
+function hideLevelUpOverlay() {
+  levelUpOverlay.hidden = true;
+}
+
+function onLevelUp(oldLevel, newLevel) {
+  if (newLevel <= oldLevel) return;
+
+  let totalBonus = 0;
+  for (let gainedLevel = oldLevel + 1; gainedLevel <= newLevel; gainedLevel += 1) {
+    totalBonus += getLevelUpGoldBonus(gainedLevel);
+  }
+
+  state.gold += totalBonus;
+  showToast(`LEVEL UP ! Lv ${newLevel} • +${totalBonus} Gold`);
+  showLevelUpOverlay(newLevel, newLevel - oldLevel, totalBonus);
+  levelBadge.classList.add("level-up-glow");
+  setTimeout(() => levelBadge.classList.remove("level-up-glow"), UI_CONFIG.questGlowDurationMs);
+
+  if (!prefersReducedMotion()) {
+    spawnConfetti();
+  }
+}
+
+function recomputeLevelFromTotalXp() {
+  const previousLevel = state.level;
+  const progress = computeLevelProgress(state.totalXp);
+
+  // Option A: ne pas faire redescendre le niveau si le total XP baisse.
+  state.level = Math.max(previousLevel, progress.level);
+
+  if (state.level > previousLevel) {
+    onLevelUp(previousLevel, state.level);
+  }
 }
 
 function renderLevel() {
-  levelBadge.textContent = `Lv ${getLevelFromXp(state.xp)}`;
+  levelBadge.textContent = `Lv ${state.level}`;
+}
+
+function renderLevelProgress() {
+  const stats = computeDisplayedProgress(state.level, state.totalXp);
+  levelProgressText.textContent = `XP: ${stats.xpIntoLevel} / ${stats.xpNeeded}`;
+  levelProgressRemaining.textContent = `Reste: ${Math.max(0, stats.xpNeeded - stats.xpIntoLevel)} XP`;
+  levelProgressBar.style.width = `${stats.progress * 100}%`;
+  levelProgressTrack.setAttribute("aria-valuemax", String(stats.xpNeeded));
+  levelProgressTrack.setAttribute("aria-valuenow", String(stats.xpIntoLevel));
 }
 
 function animateValue(element, from, to, durationMs = UI_CONFIG.countUpDurationMs) {
@@ -91,6 +211,7 @@ function renderStats(previous = state) {
   animateValue(xpValue, previous.xp, state.xp);
   animateValue(goldValue, previous.gold, state.gold);
   renderLevel();
+  renderLevelProgress();
 }
 
 function renderSessionProgress() {
@@ -183,8 +304,10 @@ function updateQuestButtonState(button, isCompleted) {
 function applyDelta({ xpDelta = 0, goldDelta = 0 }) {
   const previous = { ...state };
   state.xp = Math.max(0, state.xp + xpDelta);
+  state.totalXp = Math.max(0, state.totalXp + xpDelta);
   state.gold = Math.max(0, state.gold + goldDelta);
 
+  recomputeLevelFromTotalXp();
   renderStats(previous);
   renderSessionProgress();
   renderQuests();
@@ -300,6 +423,7 @@ function resetSession() {
   renderStats(previous);
   renderSessionProgress();
   renderQuests();
+  hideLevelUpOverlay();
   showToast("Session réinitialisée");
 }
 
@@ -311,12 +435,21 @@ function initGame() {
   sessionProgressText = document.getElementById("session-progress-text");
   sessionProgressBar = document.getElementById("session-progress-bar");
   progressTrack = document.querySelector(".progress-track");
+  levelProgressText = document.getElementById("level-progress-text");
+  levelProgressBar = document.getElementById("level-progress-bar");
+  levelProgressTrack = document.getElementById("level-progress-track");
+  levelProgressRemaining = document.getElementById("level-progress-remaining");
   toastRoot = document.getElementById("toast-root");
   confettiLayer = document.getElementById("confetti-layer");
   levelBadge = document.getElementById("level-badge");
+  levelUpOverlay = document.getElementById("level-up-overlay");
+  levelUpTitle = document.getElementById("level-up-title");
+  levelUpMessage = document.getElementById("level-up-message");
+  levelUpContinueBtn = document.getElementById("level-up-continue-btn");
 
   state = loadState();
   resetBtn.addEventListener("click", resetSession);
+  levelUpContinueBtn.addEventListener("click", hideLevelUpOverlay);
 
   renderStats();
   renderSessionProgress();

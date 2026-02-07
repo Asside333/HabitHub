@@ -211,7 +211,8 @@ h1 {
   font-size: clamp(1.35rem, 3.2vw, 1.8rem);
 }
 
-.session-progress {
+.session-progress,
+.level-progress {
   margin-top: var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid rgba(204, 220, 255, 0.26);
@@ -240,6 +241,17 @@ h1 {
   border-radius: inherit;
   background: linear-gradient(90deg, #52da70, #8df0a2);
   transition: width 260ms ease;
+}
+
+.level-progress-fill {
+  background: linear-gradient(90deg, #7ca6ff, #9fbeff);
+}
+
+.progress-subtext {
+  margin-top: 0.45rem;
+  color: #d7e4ff;
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .quests-list {
@@ -444,6 +456,37 @@ h1 {
     transform: translateY(100px) rotate(220deg);
     opacity: 0;
   }
+}
+
+
+.level-up-glow {
+  box-shadow: 0 0 0 4px rgba(145, 244, 168, 0.35), 0 0 18px rgba(145, 244, 168, 0.6);
+}
+
+.level-up-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  background: rgba(6, 15, 39, 0.6);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.level-up-modal {
+  width: min(360px, 100%);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(193, 212, 255, 0.48);
+  background: linear-gradient(160deg, rgba(27, 59, 132, 0.96), rgba(22, 45, 102, 0.95));
+  box-shadow: var(--shadow-soft);
+  padding: 1.2rem;
+  display: grid;
+  gap: 0.7rem;
+  animation: toast-in 220ms ease;
+}
+
+.level-up-modal .btn {
+  margin-top: 0.25rem;
 }
 
 @media (max-width: 860px) {
