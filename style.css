@@ -44,6 +44,10 @@ body {
   min-height: 100vh;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 h1,
 h2,
 p {
@@ -461,6 +465,10 @@ h1 {
 
 .level-up-glow {
   box-shadow: 0 0 0 4px rgba(145, 244, 168, 0.35), 0 0 18px rgba(145, 244, 168, 0.6);
+}
+
+.level-up-overlay[hidden] {
+  display: none;
 }
 
 .level-up-overlay {

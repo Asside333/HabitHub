@@ -19,6 +19,7 @@ let levelUpOverlay;
 let levelUpTitle;
 let levelUpMessage;
 let levelUpContinueBtn;
+let levelUpModalListenersController;
 
 const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -135,10 +136,56 @@ function showLevelUpOverlay(newLevel, levelsGained, goldBonus) {
   levelUpTitle.textContent = `Niveau ${newLevel} ! ${gainedText}`.trim();
   levelUpMessage.textContent = `+${goldBonus} Gold`;
   levelUpOverlay.hidden = false;
+  levelUpOverlay.setAttribute("aria-hidden", "false");
+  document.body.classList.add("modal-open");
+
+  requestAnimationFrame(() => {
+    levelUpContinueBtn?.focus();
+  });
 }
 
-function hideLevelUpOverlay() {
+function closeLevelUpModal() {
+  if (!levelUpOverlay || levelUpOverlay.hidden) return;
+
   levelUpOverlay.hidden = true;
+  levelUpOverlay.setAttribute("aria-hidden", "true");
+  document.body.classList.remove("modal-open");
+}
+
+function setupLevelUpModalListeners() {
+  if (!levelUpOverlay || !levelUpContinueBtn) return;
+
+  levelUpModalListenersController?.abort();
+  levelUpModalListenersController = new AbortController();
+  const { signal } = levelUpModalListenersController;
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      if (!(event.target instanceof Element)) return;
+
+      const closeButton = event.target.closest('[data-action="close-levelup"]');
+      if (closeButton) {
+        closeLevelUpModal();
+        return;
+      }
+
+      if (event.target === levelUpOverlay) {
+        closeLevelUpModal();
+      }
+    },
+    { signal }
+  );
+
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape") {
+        closeLevelUpModal();
+      }
+    },
+    { signal }
+  );
 }
 
 function onLevelUp(oldLevel, newLevel) {
@@ -423,7 +470,7 @@ function resetSession() {
   renderStats(previous);
   renderSessionProgress();
   renderQuests();
-  hideLevelUpOverlay();
+  closeLevelUpModal();
   showToast("Session réinitialisée");
 }
 
@@ -449,7 +496,7 @@ function initGame() {
 
   state = loadState();
   resetBtn.addEventListener("click", resetSession);
-  levelUpContinueBtn.addEventListener("click", hideLevelUpOverlay);
+  setupLevelUpModalListeners();
 
   renderStats();
   renderSessionProgress();
