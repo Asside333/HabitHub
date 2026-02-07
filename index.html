@@ -87,12 +87,12 @@
     <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
     <div id="confetti-layer" class="confetti-layer" aria-hidden="true"></div>
 
-    <div id="level-up-overlay" class="level-up-overlay" hidden>
+    <div id="level-up-overlay" class="level-up-overlay" hidden aria-hidden="true">
       <div class="level-up-modal" role="dialog" aria-modal="true" aria-labelledby="level-up-title">
         <p class="hero-kicker">LEVEL UP</p>
         <h2 id="level-up-title">Niveau 2 !</h2>
         <p id="level-up-message" class="subtitle">+12 Gold</p>
-        <button id="level-up-continue-btn" class="btn btn-primary" type="button">Continuer</button>
+        <button id="level-up-continue-btn" class="btn btn-primary" type="button" data-action="close-levelup">Continuer</button>
       </div>
     </div>
 
