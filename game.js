@@ -1085,7 +1085,7 @@
             <div class="reward-chips"><span class="chip chip-xp">+${quest.xp} XP</span><span class="chip chip-gold">+${quest.gold} Gold</span></div>
           </div>
         </div>
-        <button class="btn btn-primary" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>`;
+        <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>`;
       ui.refs.questsList.append(li);
     });
 
@@ -1178,7 +1178,7 @@
     ui.refs.filterPill.textContent = `Filtre : ${FILTER_LABELS[ui.createFilter] || FILTER_LABELS.all}`;
     list.forEach((quest) => {
       const card = document.createElement("li");
-      card.className = `catalog-card ${quest.isHidden ? "is-hidden" : ""}`;
+      card.className = `card catalog-card ${quest.isHidden ? "is-hidden" : ""}`;
       card.dataset.questId = quest.id;
       card.innerHTML = `
         <label class="select-check"><input type="checkbox" data-action="select-catalog" data-id="${quest.id}" ${ui.selectedIds.has(quest.id) ? "checked" : ""}/> </label>
@@ -1191,10 +1191,10 @@
           </div>
         </div>
         <div class="card-actions">
-          <button class="btn btn-secondary" data-action="edit-quest" data-id="${quest.id}">✏️ Éditer</button>
-          <button class="btn" data-action="toggle-hidden" data-id="${quest.id}">${quest.isHidden ? "👁️ Afficher" : "🙈 Masquer"}</button>
+          <button class="btn btn-ghost" data-action="edit-quest" data-id="${quest.id}">✏️ Éditer</button>
+          <button class="btn btn-ghost" data-action="toggle-hidden" data-id="${quest.id}">${quest.isHidden ? "👁️ Afficher" : "🙈 Masquer"}</button>
           ${quest.source === "custom" ? `<button class="btn btn-danger" data-action="delete-quest" data-id="${quest.id}">🗑️ Supprimer</button>` : ""}
-          ${quest.hasOverride ? `<button class="btn" data-action="restore-quest" data-id="${quest.id}">↩️ Restaurer</button>` : ""}
+          ${quest.hasOverride ? `<button class="btn btn-ghost" data-action="restore-quest" data-id="${quest.id}">↩️ Restaurer</button>` : ""}
         </div>`;
       ui.refs.catalogList.append(card);
     });
