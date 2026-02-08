@@ -14,12 +14,13 @@ const PROGRESSION_CONFIG = {
   },
   weeklyRules: {
     weeklyScoreFormula: "sumDailyTierPoints",
+    tierPoints: { none: 0, bronze: 1, silver: 2, gold: 3 },
     chestTiers: [
       { id: "wood", minScore: 8, bonusGold: 20, bonusXp: 30 },
       { id: "iron", minScore: 14, bonusGold: 50, bonusXp: 65 },
       { id: "crystal", minScore: 20, bonusGold: 90, bonusXp: 110 },
     ],
-    bossRules: { enabled: false, bossDamageFromTier: true },
+    bossRules: { enabled: true, bossDamageFromTier: true, baseHp: 18 },
   },
   monthlyRules: {
     monthlyPoints: { bronze: 1, silver: 2, gold: 3 },
@@ -31,6 +32,7 @@ const PROGRESSION_CONFIG = {
   },
   yearlyRules: {
     relics: ["relic_focus", "relic_balance"],
+    relicUnlockEveryPoints: 180,
     milestoneRewards: [
       { id: "y25", minPoints: 250, tokens: 10 },
       { id: "y50", minPoints: 500, tokens: 25 },
@@ -66,6 +68,33 @@ const INITIAL_GAME_STATE = {
   claims: { rewardClaims: {}, tierClaims: {}, chestClaims: {} },
   logs: { eventLog: [] },
   debug: { useDebugDate: false, debugDate: null },
+  cycles: {
+    weekly: {
+      weekKey: null,
+      days: {},
+      score: 0,
+      chestTierId: null,
+      chestClaimed: false,
+      bossMaxHp: 0,
+      bossHp: 0,
+      bossDefeated: false,
+    },
+    weeklyArchives: [],
+    bossStreak: 0,
+    monthly: {
+      monthKey: null,
+      points: 0,
+      badgeId: null,
+    },
+    yearly: {
+      yearKey: null,
+      points: 0,
+      relicsUnlocked: [],
+      milestonesClaimed: [],
+    },
+    cosmeticInventory: [],
+    badgesUnlocked: [],
+  },
 };
 
 HRPG.CONFIG = {
