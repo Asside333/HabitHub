@@ -46,6 +46,7 @@ const PROGRESSION_CONFIG = {
 const INITIAL_GAME_STATE = {
   v: 1,
   currencies: { xp: 0, gold: 0, totalXp: 0, tokens: 0 },
+  daily: { dateKey: null, objectivesCompleted: 0, tier: "none", tierBonusGoldApplied: 0 },
   progress: {
     level: 1,
     streak: 0,

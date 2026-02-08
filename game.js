@@ -45,6 +45,16 @@
     }, {});
   }
 
+  function sanitizeDailyState(value) {
+    const raw = value && typeof value === "object" ? value : {};
+    return {
+      dateKey: typeof raw.dateKey === "string" ? raw.dateKey : null,
+      objectivesCompleted: Math.max(0, Math.floor(Number(raw.objectivesCompleted) || 0)),
+      tier: typeof raw.tier === "string" ? raw.tier : "none",
+      tierBonusGoldApplied: Math.max(0, Math.floor(Number(raw.tierBonusGoldApplied) || 0)),
+    };
+  }
+
   function normalizeGameState(rawState) {
     const fallback = createInitialGameState();
     if (!rawState || typeof rawState !== "object") return fallback;
@@ -67,6 +77,7 @@
         totalXp,
         tokens: Math.max(0, Number(rawState.currencies?.tokens) || 0),
       },
+      daily: sanitizeDailyState(rawState.daily),
       progress: {
         level,
         streak: Math.max(0, Number(rawState.progress?.streak) || 0),
@@ -110,6 +121,7 @@
     normalized.completedQuestIds = normalized.quests.completedQuestIds;
     normalized.logs.eventLog = sanitizeEventLog(normalized.logs.eventLog);
     normalized.claims.rewardClaims = sanitizeRewardClaims(normalized.claims.rewardClaims);
+    normalized.daily = sanitizeDailyState(normalized.daily);
     return normalized;
   }
 
@@ -316,7 +328,7 @@
     settings: storage.loadSettings(),
     createUi: storage.loadCreateUi(),
   };
-
+  state.game.daily = sanitizeDailyState(state.game.daily);
 
   const haptics = {
     tap() {
@@ -394,7 +406,8 @@
     return toIsoDate(new Date());
   }
 
-  function getDailyTierFromCompleted(completedCount) {
+  function computeTier(dailyObjectivesCompleted) {
+    const completedCount = Math.max(0, Math.floor(Number(dailyObjectivesCompleted) || 0));
     const tiers = PROGRESSION_CONFIG.dailyTiers;
     if (completedCount >= tiers.gold.minObjectives) return "gold";
     if (completedCount >= tiers.silver.minObjectives) return "silver";
@@ -402,12 +415,59 @@
     return "none";
   }
 
-  function getTierLabel(tier) {
-    return { bronze: "Bronze", silver: "Argent", gold: "Or", none: "Aucun" }[tier] || "Aucun";
+  function getTierBonusGold(tier) {
+    if (tier === "none") return 0;
+    const tierConfig = PROGRESSION_CONFIG.dailyTiers[tier];
+    return Math.max(0, Math.floor(Number(tierConfig?.bonusGold) || 0));
   }
 
-  function getTierRank(tier) {
-    return { none: 0, bronze: 1, silver: 2, gold: 3 }[tier] || 0;
+  function countDistinctDailyObjectives(dateKey) {
+    if (!dateKey) return 0;
+    const prefix = `${dateKey}:`;
+    const claimedActions = new Set();
+    Object.keys(state.game.claims.rewardClaims).forEach((claimKey) => {
+      if (!claimKey.startsWith(prefix)) return;
+      claimedActions.add(claimKey.slice(prefix.length));
+    });
+    return claimedActions.size;
+  }
+
+  function ensureDailyProgressState() {
+    const dateKey = getActiveDateIso();
+    if (state.game.daily.dateKey !== dateKey) {
+      state.game.daily.dateKey = dateKey;
+      state.game.daily.objectivesCompleted = 0;
+      state.game.daily.tier = "none";
+      state.game.daily.tierBonusGoldApplied = 0;
+    }
+
+    const objectivesCompleted = countDistinctDailyObjectives(dateKey);
+    const tier = computeTier(objectivesCompleted);
+    const bonusWanted = getTierBonusGold(tier);
+    const bonusApplied = Math.max(0, Number(state.game.daily.tierBonusGoldApplied) || 0);
+    const bonusDelta = bonusWanted - bonusApplied;
+
+    if (bonusDelta !== 0) {
+      applyDelta(0, bonusDelta);
+      logEvent("TIER_BONUS_ADJUST", {
+        dateKey,
+        objectivesCompleted,
+        tier,
+        goldDelta: bonusDelta,
+        bonusWanted,
+        bonusAppliedBefore: bonusApplied,
+      });
+    }
+
+    state.game.daily.objectivesCompleted = objectivesCompleted;
+    state.game.daily.tier = tier;
+    state.game.daily.tierBonusGoldApplied = bonusWanted;
+    state.game.progress.lastTier = tier;
+    return state.game.daily;
+  }
+
+  function getTierLabel(tier) {
+    return { bronze: "Bronze", silver: "Argent", gold: "Or", none: "Aucun" }[tier] || "Aucun";
   }
 
   function buildRewardClaimKey(dateKey, actionId) {
@@ -435,6 +495,10 @@
       ui.showToast(`Nouveau jour détecté (${activeDate})`);
     }
     state.game.progress.lastActiveDate = activeDate;
+    state.game.daily.dateKey = activeDate;
+    state.game.daily.objectivesCompleted = 0;
+    state.game.daily.tier = "none";
+    state.game.daily.tierBonusGoldApplied = 0;
     storage.saveState(state.game);
   }
 
@@ -550,13 +614,7 @@
       haptics.success();
     }
 
-    const completedCount = state.game.completedQuestIds.length;
-    const tier = getDailyTierFromCompleted(completedCount);
-    state.game.progress.lastTier = tier;
-    if (getTierRank(tier) >= getTierRank(PROGRESSION_CONFIG.streakRules.minTierForStreak)) {
-      state.game.progress.streak += 1;
-    }
-
+    ensureDailyProgressState();
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
@@ -624,8 +682,8 @@
     ui.refs.sessionTrack.setAttribute("aria-valuenow", String(completedVisible));
     ui.refs.sessionTrack.setAttribute("aria-valuemax", String(visibleQuests.length));
 
-    const dailyTier = getDailyTierFromCompleted(completedVisible);
-    ui.refs.dailyTierStatus.textContent = `${getTierLabel(dailyTier)} • ${completedVisible} objectif(s)`;
+    const dailyState = ensureDailyProgressState();
+    ui.refs.dailyTierStatus.textContent = `${getTierLabel(dailyState.tier)} • ${dailyState.objectivesCompleted} objectif(s)`;
     ui.refs.dailyTierRule.textContent = `Argent dès ${PROGRESSION_CONFIG.dailyTiers.silver.minObjectives} objectifs • Or dès ${PROGRESSION_CONFIG.dailyTiers.gold.minObjectives} objectifs`;
     ui.refs.debugDateState.textContent = state.game.debug.useDebugDate ? "ON" : "OFF";
     ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
