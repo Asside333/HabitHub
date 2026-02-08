@@ -23,6 +23,7 @@
       <nav class="tabs" aria-label="Navigation principale">
         <button type="button" class="tab-btn is-active" data-tab-target="today" aria-controls="tab-today">Aujourd'hui</button>
         <button type="button" class="tab-btn" data-tab-target="create" aria-controls="tab-create">Créer</button>
+        <button type="button" class="tab-btn" data-tab-target="settings" aria-controls="tab-settings">Réglages</button>
       </nav>
 
       <section id="tab-today" data-tab-panel="today">
@@ -30,7 +31,6 @@
           <section class="stats" aria-labelledby="stats-title">
             <div class="stats-head">
               <h2 id="stats-title">Progression</h2>
-              <button id="reset-btn" class="btn btn-danger" type="button">Restart</button>
             </div>
 
             <div class="stats-grid">
@@ -64,23 +64,6 @@
               <p id="weekly-boss-status" class="progress-subtext">Boss: 0 / 0 • Streak boss: 0</p>
               <p id="monthly-yearly-status" class="progress-subtext">Badge: - • Reliques: 0 • Milestones: 0</p>
               <button id="claim-weekly-chest-btn" class="btn btn-secondary" type="button">Claim coffre hebdo</button>
-            </div>
-
-            <div class="debug-date-panel" aria-live="polite">
-              <label class="toggle-field" for="vacation-toggle">
-                <span>Mode vacances :</span>
-                <input id="vacation-toggle" type="checkbox" role="switch" />
-                <strong id="vacation-state">OFF</strong>
-              </label>
-              <label class="toggle-field" for="debug-date-toggle">
-                <span>Use debug date :</span>
-                <input id="debug-date-toggle" type="checkbox" role="switch" />
-                <strong id="debug-date-state">OFF</strong>
-              </label>
-              <label class="control-field" for="debug-date-input">Date simulée :
-                <input id="debug-date-input" type="date" />
-              </label>
-              <p id="active-date-label" class="progress-subtext">Date active : -</p>
             </div>
 
             <div class="level-progress" aria-live="polite">
@@ -127,18 +110,69 @@
               <p id="catalog-filter-pill" class="filter-pill" aria-live="polite"></p>
             </div>
             <div class="toolbar-row">
+              <button id="bulk-hide-btn" class="btn" type="button">Masquer la sélection</button>
+            </div>
+          </div>
+          <ul id="catalog-list" class="catalog-list"></ul>
+        </section>
+      </section>
+
+      <section id="tab-settings" data-tab-panel="settings" hidden>
+        <section class="settings-panel" aria-labelledby="settings-title">
+          <h2 id="settings-title">Réglages</h2>
+
+          <article class="settings-section" aria-labelledby="settings-general-title">
+            <h3 id="settings-general-title">Général</h3>
+            <div class="settings-row">
               <label class="toggle-field" for="haptics-toggle">
                 <span>Vibrations :</span>
                 <input id="haptics-toggle" type="checkbox" role="switch" />
                 <strong id="haptics-toggle-state">ON</strong>
               </label>
             </div>
-            <div class="toolbar-row">
-              <button id="bulk-hide-btn" class="btn" type="button">Masquer la sélection</button>
+            <div class="settings-row">
+              <label class="toggle-field" for="developer-mode-toggle">
+                <span>Mode développeur :</span>
+                <input id="developer-mode-toggle" type="checkbox" role="switch" />
+                <strong id="developer-mode-state">OFF</strong>
+              </label>
+            </div>
+          </article>
+
+          <article class="settings-section" aria-labelledby="settings-gameplay-title">
+            <h3 id="settings-gameplay-title">Gameplay</h3>
+            <div class="settings-row">
+              <label class="toggle-field" for="vacation-toggle">
+                <span>Mode vacances :</span>
+                <input id="vacation-toggle" type="checkbox" role="switch" />
+                <strong id="vacation-state">OFF</strong>
+              </label>
+            </div>
+            <p id="vacation-remaining-label" class="progress-subtext">Vacances restantes : 0</p>
+          </article>
+
+          <article id="developer-settings-section" class="settings-section" aria-labelledby="settings-dev-title" hidden>
+            <h3 id="settings-dev-title">Développeur</h3>
+            <div class="settings-row">
+              <label class="toggle-field" for="debug-date-toggle">
+                <span>Use debug date :</span>
+                <input id="debug-date-toggle" type="checkbox" role="switch" />
+                <strong id="debug-date-state">OFF</strong>
+              </label>
+            </div>
+            <label class="control-field" for="debug-date-input">Date simulée :
+              <input id="debug-date-input" type="date" />
+            </label>
+            <p id="active-date-label" class="progress-subtext">Date active : -</p>
+          </article>
+
+          <article class="settings-section" aria-labelledby="settings-data-title">
+            <h3 id="settings-data-title">Gestion des données</h3>
+            <div class="settings-actions">
+              <button id="reset-btn" class="btn btn-danger" type="button">Restart / Reset progression</button>
               <button id="catalog-reset-btn" class="btn btn-danger" type="button">Réinitialiser mon catalogue</button>
             </div>
-          </div>
-          <ul id="catalog-list" class="catalog-list"></ul>
+          </article>
         </section>
       </section>
     </main>
