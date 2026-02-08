@@ -21,14 +21,14 @@
       </header>
 
       <nav class="tabs" aria-label="Navigation principale">
-        <button type="button" class="tab-btn is-active" data-tab-target="today" aria-controls="tab-today">Aujourd'hui</button>
-        <button type="button" class="tab-btn" data-tab-target="create" aria-controls="tab-create">Créer</button>
-        <button type="button" class="tab-btn" data-tab-target="settings" aria-controls="tab-settings">Réglages</button>
+        <button type="button" class="btn btn-ghost tab-btn is-active" data-tab-target="today" aria-controls="tab-today">Aujourd'hui</button>
+        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="create" aria-controls="tab-create">Créer</button>
+        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="settings" aria-controls="tab-settings">Réglages</button>
       </nav>
 
       <section id="tab-today" data-tab-panel="today">
         <div class="layout-grid">
-          <section class="stats" aria-labelledby="stats-title">
+          <section class="card stats" aria-labelledby="stats-title">
             <div class="stats-head">
               <h2 id="stats-title">Progression</h2>
             </div>
@@ -68,7 +68,7 @@
                 <div class="progress-label-row"><p class="label">Progression hebdo/mensuelle</p><strong id="weekly-score-status">Score hebdo: 0</strong></div>
                 <p id="weekly-boss-status" class="progress-subtext">Boss: 0 / 0 • Streak boss: 0</p>
                 <p id="monthly-yearly-status" class="progress-subtext">Badge: - • Reliques: 0 • Milestones: 0</p>
-                <button id="claim-weekly-chest-btn" class="btn btn-secondary" type="button">Claim coffre hebdo</button>
+                <button id="claim-weekly-chest-btn" class="btn btn-success" type="button">Claim coffre hebdo</button>
               </div>
             </section>
 
@@ -79,7 +79,7 @@
             </div>
           </section>
 
-          <section class="quests-section" aria-labelledby="quests-title">
+          <section class="card quests-section" aria-labelledby="quests-title">
             <h2 id="quests-title">Quêtes du jour</h2>
             <ul id="quests-list" class="quests-list"></ul>
           </section>
@@ -87,7 +87,7 @@
       </section>
 
       <section id="tab-create" data-tab-panel="create" hidden>
-        <section class="manage-panel" aria-labelledby="create-title">
+        <section class="card manage-panel" aria-labelledby="create-title">
           <div class="create-toolbar">
             <h2 id="create-title">Catalogue des habitudes</h2>
             <div class="toolbar-row">
@@ -116,7 +116,7 @@
               <p id="catalog-filter-pill" class="filter-pill" aria-live="polite"></p>
             </div>
             <div class="toolbar-row">
-              <button id="bulk-hide-btn" class="btn" type="button">Masquer la sélection</button>
+              <button id="bulk-hide-btn" class="btn btn-ghost" type="button">Masquer la sélection</button>
             </div>
           </div>
           <ul id="catalog-list" class="catalog-list"></ul>
@@ -124,10 +124,10 @@
       </section>
 
       <section id="tab-settings" data-tab-panel="settings" hidden>
-        <section class="settings-panel" aria-labelledby="settings-title">
+        <section class="card settings-panel" aria-labelledby="settings-title">
           <h2 id="settings-title">Réglages</h2>
 
-          <article class="settings-section" aria-labelledby="settings-general-title">
+          <article class="card settings-section" aria-labelledby="settings-general-title">
             <h3 id="settings-general-title">Général</h3>
             <div class="settings-row">
               <label class="toggle-field" for="haptics-toggle">
@@ -145,7 +145,7 @@
             </div>
           </article>
 
-          <article class="settings-section" aria-labelledby="settings-gameplay-title">
+          <article class="card settings-section" aria-labelledby="settings-gameplay-title">
             <h3 id="settings-gameplay-title">Gameplay</h3>
             <div class="settings-row">
               <label class="toggle-field" for="vacation-toggle">
@@ -157,7 +157,7 @@
             <p id="vacation-remaining-label" class="progress-subtext">Vacances restantes : 0</p>
           </article>
 
-          <article id="developer-settings-section" class="settings-section" aria-labelledby="settings-dev-title" hidden>
+          <article id="developer-settings-section" class="card settings-section" aria-labelledby="settings-dev-title" hidden>
             <h3 id="settings-dev-title">Développeur</h3>
             <div class="settings-row">
               <label class="toggle-field" for="debug-date-toggle">
@@ -173,7 +173,7 @@
             <p id="dev-tech-info" class="progress-subtext">Clé save: habitrpg.save • Schéma: -</p>
           </article>
 
-          <article class="settings-section" aria-labelledby="settings-data-title">
+          <article class="card settings-section" aria-labelledby="settings-data-title">
             <h3 id="settings-data-title">Gestion des données</h3>
             <div class="settings-actions">
               <button id="reset-btn" class="btn btn-danger" type="button">Restart / Reset progression</button>
@@ -199,8 +199,8 @@
           <p id="editor-error" class="form-error" aria-live="polite"></p>
           <div class="form-actions">
             <button id="editor-save-btn" class="btn btn-primary" type="submit">Enregistrer</button>
-            <button id="editor-cancel-btn" class="btn" type="button" data-action="close-editor">Annuler</button>
-            <button id="editor-restore-btn" class="btn" type="button" hidden>Restaurer</button>
+            <button id="editor-cancel-btn" class="btn btn-ghost" type="button" data-action="close-editor">Annuler</button>
+            <button id="editor-restore-btn" class="btn btn-ghost" type="button" hidden>Restaurer</button>
             <button id="editor-delete-btn" class="btn btn-danger" type="button" hidden>Supprimer</button>
           </div>
         </form>
