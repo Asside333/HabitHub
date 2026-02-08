@@ -313,6 +313,7 @@
     iconSearch: "",
     selectedIds: new Set(),
     lastCompletedQuestId: null,
+    lastHeroXpTotal: null,
     editor: { open: false, mode: "create", questId: null, icon: ICON_CATALOG[0].key },
     bindRefs() {
       this.refs = {
@@ -322,6 +323,11 @@
         xp: document.getElementById("xp-value"),
         gold: document.getElementById("gold-value"),
         levelBadge: document.getElementById("level-badge"),
+        xpHeroTitle: document.getElementById("xp-hero-title"),
+        xpHeroText: document.getElementById("xp-hero-text"),
+        xpHeroBar: document.getElementById("xp-hero-bar"),
+        xpHeroTrack: document.getElementById("xp-hero-track"),
+        xpHeroRemaining: document.getElementById("xp-hero-remaining"),
         sessionText: document.getElementById("session-progress-text"),
         sessionBar: document.getElementById("session-progress-bar"),
         sessionTrack: document.getElementById("session-progress-track"),
@@ -438,9 +444,11 @@
     closeLevelUpOverlay() {
       this.refs.levelUpOverlay.hidden = true;
       document.body.classList.remove("modal-open");
+      renderStats();
     },
     showLevelUpOverlay(level, rewardGold) {
       const overlayConfig = UI_CONFIG.levelUpOverlay || {};
+      renderStats();
       this.refs.levelUpTitle.textContent = overlayConfig.title || "LEVEL UP";
       this.refs.levelUpCloseBtn.textContent = overlayConfig.ctaLabel || "Continuer";
       this.refs.levelUpLevel.textContent = `Niveau ${level} atteint !`;
@@ -1165,18 +1173,66 @@
     persistCatalog();
   }
 
+  function prefersReducedMotion() {
+    if (state.settings.reduceMotion) return true;
+    if (typeof window.matchMedia !== "function") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }
+
+  function getXpHeroBucket(ratio) {
+    if (ratio < 0.3) return "xp-pct-low";
+    if (ratio < 0.7) return "xp-pct-mid";
+    return "xp-pct-high";
+  }
+
+  function renderXpHeroBar() {
+    if (!ui.refs.xpHeroBar || !ui.refs.xpHeroTrack) return;
+    const totalXp = Math.max(0, Math.floor(Number(state.game.totalXp) || 0));
+    const level = Math.max(1, Math.floor(Number(state.game.level) || 1));
+    const levelProgress = computeLevelProgressAtLevel(totalXp, level);
+    const safeRatio = clamp(Number(levelProgress.ratio) || 0, 0, 1);
+    const safeInto = Math.max(0, Math.floor(Number(levelProgress.xpIntoLevel) || 0));
+    const safeNeed = Math.max(1, Math.floor(Number(levelProgress.xpNeeded) || 1));
+    const safeRemain = Math.max(0, Math.floor(Number(levelProgress.xpRemaining) || 0));
+    const percent = Math.round(safeRatio * 100);
+
+    ui.refs.xpHeroTrack.classList.remove("xp-pct-low", "xp-pct-mid", "xp-pct-high");
+    ui.refs.xpHeroTrack.classList.add(getXpHeroBucket(safeRatio));
+
+    ui.refs.xpHeroTitle.textContent = `Niveau ${Math.max(1, levelProgress.level)}`;
+    ui.refs.xpHeroText.textContent = `XP: ${safeInto} / ${safeNeed}`;
+    ui.refs.xpHeroBar.style.width = `${percent}%`;
+    ui.refs.xpHeroRemaining.textContent = `Reste: ${safeRemain} XP`;
+    ui.refs.xpHeroTrack.setAttribute("aria-valuenow", String(safeInto));
+    ui.refs.xpHeroTrack.setAttribute("aria-valuemax", String(safeNeed));
+
+    const gainedXp = ui.lastHeroXpTotal !== null && totalXp > ui.lastHeroXpTotal;
+    if (gainedXp && !prefersReducedMotion()) {
+      ui.refs.xpHeroBar.classList.remove("xp-shine");
+      void ui.refs.xpHeroBar.offsetWidth;
+      ui.refs.xpHeroBar.classList.add("xp-shine");
+    }
+    ui.lastHeroXpTotal = totalXp;
+  }
+
   function renderStats() {
     ui.refs.xp.textContent = String(state.game.xp);
     ui.refs.gold.textContent = String(state.game.gold);
     ui.refs.levelBadge.textContent = `Lv ${state.game.level}`;
 
     const levelProgress = computeLevelProgressAtLevel(state.game.totalXp, state.game.level);
-    ui.refs.levelText.textContent = `XP: ${levelProgress.xpIntoLevel} / ${levelProgress.xpNeeded}`;
-    ui.refs.levelBar.style.width = `${Math.round(levelProgress.ratio * 100)}%`;
-    ui.refs.levelRemain.textContent = `Reste: ${levelProgress.xpRemaining} XP`;
+    const safeRatio = clamp(Number(levelProgress.ratio) || 0, 0, 1);
+    const safeInto = Math.max(0, Math.floor(Number(levelProgress.xpIntoLevel) || 0));
+    const safeNeed = Math.max(1, Math.floor(Number(levelProgress.xpNeeded) || 1));
+    const safeRemain = Math.max(0, Math.floor(Number(levelProgress.xpRemaining) || 0));
 
-    ui.refs.levelTrack.setAttribute("aria-valuenow", String(levelProgress.xpIntoLevel));
-    ui.refs.levelTrack.setAttribute("aria-valuemax", String(levelProgress.xpNeeded));
+    renderXpHeroBar();
+    ui.refs.levelText.textContent = `XP: ${safeInto} / ${safeNeed}`;
+    ui.refs.levelBar.style.width = `${Math.round(safeRatio * 100)}%`;
+    ui.refs.levelRemain.textContent = `Reste: ${safeRemain} XP`;
+
+    ui.refs.levelTrack.setAttribute("aria-valuenow", String(safeInto));
+    ui.refs.levelTrack.setAttribute("aria-valuemax", String(safeNeed));
   }
 
   function renderTodayTab() {

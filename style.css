@@ -164,6 +164,75 @@ h1 {
   border-color: rgba(149, 239, 169, 0.72);
 }
 
+
+
+.xp-hero {
+  --xp-accent: #5ca5ff;
+  margin-top: 0;
+  padding: clamp(1rem, 2.8vw, 1.4rem);
+  display: grid;
+  gap: 0.55rem;
+  background: linear-gradient(145deg, rgba(38, 84, 178, 0.94), rgba(19, 48, 112, 0.9));
+}
+
+.xp-hero-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.xp-hero h2 {
+  font-size: clamp(1.3rem, 4.4vw, 2rem);
+}
+
+.xp-hero-text {
+  color: #f0f6ff;
+  font-weight: 800;
+  font-size: clamp(0.95rem, 2.8vw, 1.08rem);
+}
+
+.xp-hero-track {
+  height: clamp(1.15rem, 2.6vw, 1.5rem);
+  border-radius: 999px;
+  border: 1px solid rgba(211, 227, 255, 0.45);
+  background: rgba(156, 184, 248, 0.28);
+}
+
+.xp-hero-fill {
+  width: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--xp-accent) 80%, #ffffff 20%), var(--xp-accent));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 0 14px color-mix(in srgb, var(--xp-accent) 55%, transparent);
+}
+
+.xp-hero-track.xp-pct-low {
+  --xp-accent: #5aa8ff;
+}
+
+.xp-hero-track.xp-pct-mid {
+  --xp-accent: #9b7dff;
+}
+
+.xp-hero-track.xp-pct-high {
+  --xp-accent: #54d88a;
+}
+
+.xp-hero-fill.xp-shine {
+  animation: xp-shine 900ms ease-out;
+}
+
+@keyframes xp-shine {
+  0% { filter: brightness(1); }
+  35% { filter: brightness(1.28); }
+  100% { filter: brightness(1); }
+}
+
+.xp-hero-remaining {
+  margin-top: 0;
+  font-size: clamp(0.9rem, 2.8vw, 1.02rem);
+}
+
 .layout-grid {
   display: grid;
   gap: var(--space-24);
@@ -274,6 +343,7 @@ h1 {
 }
 
 .level-progress {
+  opacity: 0.88;
   margin-top: var(--space-16);
   border-radius: var(--radius-lg);
   border: 1px solid var(--outline);
@@ -304,7 +374,7 @@ h1 {
   transition: width 260ms ease;
 }
 
-.level-progress-fill {
+.level-progress-secondary .level-progress-fill {
   background: linear-gradient(90deg, #7ca6ff, #9fbeff);
 }
 
@@ -785,7 +855,8 @@ body.reduce-motion *::after {
 body.reduce-motion .quest-success,
 body.reduce-motion .btn-punch,
 body.reduce-motion .toast-enter,
-body.reduce-motion .toast-exit {
+body.reduce-motion .toast-exit,
+body.reduce-motion .xp-shine {
   animation: none !important;
 }
 
@@ -801,7 +872,8 @@ body.reduce-motion .toast-exit {
 
   .quest.pop,
   .quest.glow,
-  .confetti {
+  .confetti,
+  .xp-shine {
     animation: none !important;
   }
 }
