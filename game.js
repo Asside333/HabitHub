@@ -1,4 +1,5 @@
 (function initHabitHub() {
+  // === SECTION: Config access ===
   const { BASE_QUESTS, ICON_CATALOG, initialGameState: INITIAL_GAME_STATE, progressionConfig: PROGRESSION_CONFIG, progression: PROGRESSION, ui: UI_CONFIG } = HRPG.CONFIG;
 
   function cloneJson(value) {
@@ -98,14 +99,14 @@
     const nestedCompleted = rawState.quests && Array.isArray(rawState.quests.completedQuestIds) ? rawState.quests.completedQuestIds : legacyCompleted;
     const completedQuestIds = nestedCompleted.filter((id) => typeof id === "string");
 
-    const totalXp = Math.max(0, Number(rawState.totalXp ?? rawState.currencies?.totalXp ?? rawState.xp ?? rawState.currencies?.xp) || 0);
+    const totalXp = clamp(Number(rawState.totalXp ?? rawState.currencies?.totalXp ?? rawState.xp ?? rawState.currencies?.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
     const progressData = computeLevelProgress(totalXp);
-    const xp = Math.max(0, Number(rawState.xp ?? rawState.currencies?.xp) || 0);
-    const gold = Math.max(0, Number(rawState.gold ?? rawState.currencies?.gold) || 0);
+    const xp = clamp(Number(rawState.xp ?? rawState.currencies?.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
+    const gold = clamp(Number(rawState.gold ?? rawState.currencies?.gold) || 0, 0, Number.MAX_SAFE_INTEGER);
     const level = Math.max(progressData.level, Number(rawState.level ?? rawState.progress?.level) || 1);
 
     const next = {
-      v: Number(rawState.v) || 1,
+      v: clamp(Math.floor(Number(rawState.v) || 1), 1, 999),
       currencies: {
         xp,
         gold,
@@ -152,9 +153,9 @@
   function toPersistedGameState(gameState) {
     const normalized = normalizeGameState(gameState);
     normalized.v = 1;
-    normalized.currencies.xp = Math.max(0, Number(normalized.xp) || 0);
-    normalized.currencies.gold = Math.max(0, Number(normalized.gold) || 0);
-    normalized.currencies.totalXp = Math.max(0, Number(normalized.totalXp) || 0);
+    normalized.currencies.xp = clamp(Number(normalized.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
+    normalized.currencies.gold = clamp(Number(normalized.gold) || 0, 0, Number.MAX_SAFE_INTEGER);
+    normalized.currencies.totalXp = clamp(Number(normalized.totalXp) || 0, 0, Number.MAX_SAFE_INTEGER);
     normalized.progress.level = Math.max(1, Number(normalized.level) || 1);
     normalized.quests.completedQuestIds = Array.isArray(normalized.completedQuestIds) ? normalized.completedQuestIds.filter((id) => typeof id === "string") : [];
     normalized.completedQuestIds = normalized.quests.completedQuestIds;
@@ -168,6 +169,7 @@
     return normalized;
   }
 
+  // === SECTION: State persistence (load/save/migrations) ===
   const storage = {
     keys: {
       save: "habitrpg.save",
@@ -191,16 +193,20 @@
     saveJson(key, value) {
       localStorage.setItem(key, JSON.stringify(value));
     },
-    migrateState(oldState) {
-      return normalizeGameState(oldState);
+    migrateStateVersion(stateValue, fromVersion) {
+      const normalized = normalizeGameState(stateValue);
+      const safeFromVersion = clamp(Math.floor(Number(fromVersion) || 1), 1, 999);
+      if (safeFromVersion <= 1) return { ...normalized, v: 1 };
+      return { ...normalized, v: 1 };
+    },
+    migrateState(oldState, fromVersion = 1) {
+      return this.migrateStateVersion(oldState, fromVersion);
     },
     loadState() {
       const save = this.loadJson(this.keys.save, null);
-      if (save && typeof save === "object" && typeof save.schemaVersion === "number") {
-        const migrated = this.migrateState(save.state);
-        if (save.schemaVersion !== migrated.v) {
-          return this.migrateState(migrated);
-        }
+      if (save && typeof save === "object") {
+        const schemaVersion = clamp(Math.floor(Number(save.schemaVersion) || 1), 1, 999);
+        const migrated = this.migrateState(save.state, schemaVersion);
         return migrated;
       }
 
@@ -212,6 +218,7 @@
     },
     saveState(gameState) {
       const next = toPersistedGameState(gameState);
+      assertState(next);
       this.saveJson(this.keys.save, {
         schemaVersion: next.v,
         updatedAt: new Date().toISOString(),
@@ -274,6 +281,7 @@
     },
   };
 
+  // === SECTION: Quest catalog selectors/getters ===
   const catalog = {
     baseMap: new Map(BASE_QUESTS.map((quest) => [quest.id, quest])),
     iconMap: new Map(ICON_CATALOG.map((icon) => [icon.key, icon])),
@@ -304,6 +312,7 @@
     },
   };
 
+  // === SECTION: UI refs + helpers ===
   const ui = {
     refs: {},
     activeTab: "today",
@@ -459,11 +468,11 @@
   };
 
 
-
   function applyMotionPreferences() {
     document.body.classList.toggle("reduce-motion", state.settings.reduceMotion);
   }
 
+  // === SECTION: In-memory state bootstrap ===
   let state = {
     game: storage.loadState(),
     customQuests: storage.loadCustomQuests(),
@@ -474,7 +483,10 @@
   };
   state.game.daily = sanitizeDailyState(state.game.daily);
   state.game.cycles = sanitizeCycles(state.game.cycles);
+  state.game.v = clamp(Math.floor(Number(state.game.v) || 1), 1, 999);
+  assertState(state.game);
 
+  // === SECTION: Device feedback (haptics/sound) ===
   const haptics = {
     tap() {
       this.play(10);
@@ -577,6 +589,37 @@
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
+  }
+
+  function assertState(gameState) {
+    const isDevHost = typeof window !== "undefined" && (window.location?.hostname === "localhost" || window.location?.hostname === "127.0.0.1");
+    if (!isDevHost) return;
+
+    const errors = [];
+    const numericFields = [
+      ["currencies.xp", gameState?.currencies?.xp],
+      ["currencies.gold", gameState?.currencies?.gold],
+      ["currencies.totalXp", gameState?.currencies?.totalXp],
+      ["progress.level", gameState?.progress?.level],
+      ["progress.streak", gameState?.progress?.streak],
+    ];
+
+    numericFields.forEach(([label, value]) => {
+      if (!Number.isFinite(value)) {
+        errors.push(`${label} must be finite`);
+      }
+    });
+
+    if ((Number(gameState?.currencies?.xp) || 0) < 0) errors.push("currencies.xp cannot be negative");
+    if ((Number(gameState?.currencies?.gold) || 0) < 0) errors.push("currencies.gold cannot be negative");
+
+    if (!gameState?.currencies || !gameState?.progress || !gameState?.quests || !gameState?.claims || !gameState?.daily) {
+      errors.push("state is missing required fields");
+    }
+
+    if (errors.length) {
+      throw new Error(`Invalid state: ${errors.join(" | ")}`);
+    }
   }
 
   function xpForNextLevel(level) {
@@ -1018,6 +1061,7 @@
     state.game.progress.level = state.game.level;
   }
 
+  // === SECTION: Reward / claim engine ===
   function claimReward(params) {
     const actionId = typeof params?.actionId === "string" ? params.actionId : "";
     const dateKey = typeof params?.dateKey === "string" ? params.dateKey : getActiveDateIso();
@@ -1147,9 +1191,7 @@
 
     ensureDailyProgressState();
     storage.saveState(state.game);
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderForActiveTab();
     highlightCatalogCard(questId);
   }
 
@@ -1185,6 +1227,7 @@
     return "xp-pct-high";
   }
 
+  // === SECTION: UI render ===
   function renderXpHeroBar() {
     if (!ui.refs.xpHeroBar || !ui.refs.xpHeroTrack) return;
     const totalXp = Math.max(0, Math.floor(Number(state.game.totalXp) || 0));
@@ -1283,7 +1326,6 @@
 
     renderStats();
   }
-
 
 
   function renderSettingsTab() {
@@ -1456,9 +1498,7 @@
 
     cleanupCompletedIds();
     closeQuestEditor();
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderForActiveTab();
     highlightCatalogCard(ui.editor.mode === "edit" ? ui.editor.questId : Array.from(ui.selectedIds)[0]);
   }
 
@@ -1473,9 +1513,7 @@
     haptics.undo();
     cleanupCompletedIds();
     storage.saveState(state.game);
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderAllTabs();
     highlightCatalogCard(id);
   }
 
@@ -1492,9 +1530,7 @@
     delete state.questOverrides[id];
     persistCatalog();
     storage.saveState(state.game);
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderAllTabs();
     ui.showToast("warn", "Catalogue", "Habitude supprimée");
     haptics.error();
   }
@@ -1504,9 +1540,7 @@
     state.game = storage.resetProgress(state.game);
     handleDayChange();
     storage.saveState(state.game);
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderAllTabs();
     ui.showToast("info", "Réinitialisation", "Progression réinitialisée");
   }
 
@@ -1519,9 +1553,7 @@
     persistCatalog();
     cleanupCompletedIds();
     storage.saveState(state.game);
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderAllTabs();
     ui.showToast("info", "Réinitialisation", "Catalogue réinitialisé");
   }
 
@@ -1535,6 +1567,18 @@
   }
 
 
+  function renderAllTabs() {
+    renderTodayTab();
+    renderCreateTab();
+    renderSettingsTab();
+  }
+
+  function renderForActiveTab() {
+    if (ui.activeTab === "today") renderTodayTab();
+    if (ui.activeTab === "create") renderCreateTab();
+    if (ui.activeTab === "settings") renderSettingsTab();
+  }
+
   function setActiveTab(tabId) {
     ui.activeTab = tabId;
     ui.refs.tabButtons.forEach((btn) => {
@@ -1547,6 +1591,7 @@
     });
   }
 
+  // === SECTION: Event handlers ===
   function attachEvents() {
     const unlockAudioOnce = () => {
       audioFx.unlock();
@@ -1807,9 +1852,7 @@
     handleDayChange();
     attachEvents();
     storage.saveState(state.game);
-    renderTodayTab();
-    renderCreateTab();
-    renderSettingsTab();
+    renderAllTabs();
   }
 
   document.addEventListener("DOMContentLoaded", init);
