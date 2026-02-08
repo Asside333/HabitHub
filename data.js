@@ -37,7 +37,12 @@ const PROGRESSION_CONFIG = {
     ],
   },
   antiExploit: {
-    caps: { maxDailyClaims: 24, maxRewardPerAction: 1 },
+    caps: {
+      maxDailyClaims: 24,
+      maxRewardPerAction: 1,
+      capXpPerDay: 200,
+      capGoldPerDay: 120,
+    },
     claimRules: { uniqueByActionAndDate: true, rejectFutureDate: true },
     eventLogMaxEntries: 200,
   },
