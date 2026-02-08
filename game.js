@@ -22,7 +22,27 @@
 
   function sanitizeEventLog(value) {
     if (!Array.isArray(value)) return [];
-    return value.filter((entry) => entry && typeof entry.type === "string").slice(-200);
+    const maxEntries = Math.max(1, Number(PROGRESSION_CONFIG.antiExploit?.eventLogMaxEntries) || 200);
+    return value
+      .filter((entry) => entry && typeof entry.type === "string")
+      .map((entry) => ({
+        timestamp: typeof entry.timestamp === "string" ? entry.timestamp : (typeof entry.at === "string" ? entry.at : new Date().toISOString()),
+        type: entry.type,
+        payload: entry.payload && typeof entry.payload === "object" ? entry.payload : {},
+      }))
+      .slice(-maxEntries);
+  }
+
+  function sanitizeRewardClaims(value) {
+    if (!value || typeof value !== "object") return {};
+    return Object.entries(value).reduce((acc, [key, claim]) => {
+      if (typeof key !== "string" || !claim || typeof claim !== "object") return acc;
+      const xp = Math.max(0, Number(claim.xp) || 0);
+      const gold = Math.max(0, Number(claim.gold) || 0);
+      const claimedAt = typeof claim.claimedAt === "string" ? claim.claimedAt : new Date().toISOString();
+      acc[key] = { claimedAt, xp, gold };
+      return acc;
+    }, {});
   }
 
   function normalizeGameState(rawState) {
@@ -58,7 +78,7 @@
         completedQuestIds,
       },
       claims: {
-        rewardClaims: rawState.claims?.rewardClaims && typeof rawState.claims.rewardClaims === "object" ? rawState.claims.rewardClaims : {},
+        rewardClaims: sanitizeRewardClaims(rawState.claims?.rewardClaims),
         tierClaims: rawState.claims?.tierClaims && typeof rawState.claims.tierClaims === "object" ? rawState.claims.tierClaims : {},
         chestClaims: rawState.claims?.chestClaims && typeof rawState.claims.chestClaims === "object" ? rawState.claims.chestClaims : {},
       },
@@ -89,6 +109,7 @@
     normalized.quests.completedQuestIds = Array.isArray(normalized.completedQuestIds) ? normalized.completedQuestIds.filter((id) => typeof id === "string") : [];
     normalized.completedQuestIds = normalized.quests.completedQuestIds;
     normalized.logs.eventLog = sanitizeEventLog(normalized.logs.eventLog);
+    normalized.claims.rewardClaims = sanitizeRewardClaims(normalized.claims.rewardClaims);
     return normalized;
   }
 
@@ -389,10 +410,19 @@
     return { none: 0, bronze: 1, silver: 2, gold: 3 }[tier] || 0;
   }
 
+  function buildRewardClaimKey(dateKey, actionId) {
+    return `${dateKey}:${actionId}`;
+  }
+
   function logEvent(type, payload) {
-    state.game.logs.eventLog.push({ type, payload, at: new Date().toISOString() });
-    if (state.game.logs.eventLog.length > 200) {
-      state.game.logs.eventLog = state.game.logs.eventLog.slice(-200);
+    const maxEntries = Math.max(1, Number(PROGRESSION_CONFIG.antiExploit?.eventLogMaxEntries) || 200);
+    state.game.logs.eventLog.push({
+      timestamp: new Date().toISOString(),
+      type,
+      payload: payload && typeof payload === "object" ? payload : {},
+    });
+    if (state.game.logs.eventLog.length > maxEntries) {
+      state.game.logs.eventLog = state.game.logs.eventLog.slice(-maxEntries);
     }
   }
 
@@ -443,31 +473,81 @@
     state.game.progress.level = state.game.level;
   }
 
-  function rollbackCompletedQuest(quest) {
+  function claimReward(params) {
+    const actionId = typeof params?.actionId === "string" ? params.actionId : "";
+    const dateKey = typeof params?.dateKey === "string" ? params.dateKey : getActiveDateIso();
+    const mode = params?.mode === "rollback" ? "rollback" : "claim";
+    const claimKey = buildRewardClaimKey(dateKey, actionId);
+    const existingClaim = state.game.claims.rewardClaims[claimKey];
+
+    if (!actionId || !dateKey) {
+      return { applied: false, xpDelta: 0, goldDelta: 0, reason: "invalid_input" };
+    }
+
+    if (mode === "claim") {
+      if (existingClaim) {
+        return { applied: false, xpDelta: 0, goldDelta: 0, reason: "already_claimed" };
+      }
+      const xpGain = Math.max(0, Math.round(Number(params?.xp) || 0));
+      const goldGain = Math.max(0, Math.round(Number(params?.gold) || 0));
+      state.game.claims.rewardClaims[claimKey] = {
+        claimedAt: new Date().toISOString(),
+        xp: xpGain,
+        gold: goldGain,
+      };
+      applyDelta(xpGain, goldGain);
+      logEvent("CLAIM", { actionId, dateKey, xpDelta: xpGain, goldDelta: goldGain });
+      return { applied: true, xpDelta: xpGain, goldDelta: goldGain, reason: "claimed" };
+    }
+
+    if (!existingClaim) {
+      return { applied: false, xpDelta: 0, goldDelta: 0, reason: "missing_claim" };
+    }
+
+    const xpRollback = Math.max(0, Number(existingClaim.xp) || 0);
+    const goldRollback = Math.max(0, Number(existingClaim.gold) || 0);
+    applyDelta(-xpRollback, -goldRollback);
+    delete state.game.claims.rewardClaims[claimKey];
+    logEvent("ROLLBACK", { actionId, dateKey, xpDelta: -xpRollback, goldDelta: -goldRollback });
+    return { applied: true, xpDelta: -xpRollback, goldDelta: -goldRollback, reason: "rolled_back" };
+  }
+
+  function rollbackCompletedQuest(quest, dateKey) {
     state.game.completedQuestIds = state.game.completedQuestIds.filter((id) => id !== quest.id);
-    applyDelta(-quest.xp, -quest.gold);
+    state.game.quests.completedQuestIds = state.game.completedQuestIds;
+    return claimReward({ actionId: quest.id, dateKey, mode: "rollback" });
   }
 
   function toggleQuestCompletion(questId) {
     const quest = getQuestById(questId);
     if (!quest || quest.isHidden) return;
     handleDayChange();
+    const dateKey = getActiveDateIso();
     const completed = state.game.completedQuestIds.includes(questId);
-    const actionId = `${questId}:${getActiveDateIso()}`;
+
+    let rewardResult;
     if (completed) {
-      rollbackCompletedQuest(quest);
-      delete state.game.claims.rewardClaims[actionId];
-      ui.showToast(`-${quest.xp} XP • -${quest.gold} Gold`);
+      rewardResult = rollbackCompletedQuest(quest, dateKey);
+      if (rewardResult.applied) {
+        ui.showToast(`${rewardResult.xpDelta} XP • ${rewardResult.goldDelta} Gold`);
+      }
       haptics.tap();
-      logEvent("quest_uncompleted", { questId, activeDate: getActiveDateIso() });
     } else {
       state.game.completedQuestIds.push(questId);
       state.game.quests.completedQuestIds = state.game.completedQuestIds;
-      state.game.claims.rewardClaims[actionId] = true;
-      applyDelta(quest.xp, quest.gold);
-      ui.showToast(`+${quest.xp} XP • +${quest.gold} Gold`);
+      rewardResult = claimReward({
+        actionId: quest.id,
+        dateKey,
+        xp: quest.xp,
+        gold: quest.gold,
+        mode: "claim",
+      });
+      if (rewardResult.applied) {
+        ui.showToast(`+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
+      } else if (rewardResult.reason === "already_claimed") {
+        ui.showToast("Récompense déjà récupérée aujourd'hui.");
+      }
       haptics.success();
-      logEvent("quest_completed", { questId, activeDate: getActiveDateIso() });
     }
 
     const completedCount = state.game.completedQuestIds.length;
