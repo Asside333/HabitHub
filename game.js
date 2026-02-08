@@ -8,6 +8,8 @@
       custom: "habithub-quests-custom-v1",
       hidden: "habithub-quests-hidden-v1",
       overrides: "habithub-quests-overrides-v1",
+      settings: "habithub-settings-v1",
+      createUi: "habithub-ui-create-filter-v1",
     },
     loadJson(key, fallback) {
       const raw = localStorage.getItem(key);
@@ -64,6 +66,25 @@
     saveOverrides(overrides) {
       this.saveJson(this.keys.overrides, overrides);
     },
+    loadSettings() {
+      const settings = this.loadJson(this.keys.settings, {});
+      if (!settings || typeof settings !== "object") return { hapticsEnabled: true };
+      return { hapticsEnabled: settings.hapticsEnabled !== false };
+    },
+    saveSettings(settings) {
+      this.saveJson(this.keys.settings, settings);
+    },
+    loadCreateUi() {
+      const data = this.loadJson(this.keys.createUi, {});
+      if (!data || typeof data !== "object") return { filter: "all", sort: "recent" };
+      return {
+        filter: typeof data.filter === "string" ? data.filter : "all",
+        sort: typeof data.sort === "string" ? data.sort : "recent",
+      };
+    },
+    saveCreateUi(data) {
+      this.saveJson(this.keys.createUi, data);
+    },
   };
 
   const catalog = {
@@ -100,6 +121,7 @@
     refs: {},
     activeTab: "today",
     createFilter: "all",
+    createSort: "recent",
     createSearch: "",
     iconSearch: "",
     selectedIds: new Set(),
@@ -121,7 +143,11 @@
         levelRemain: document.getElementById("level-progress-remaining"),
         resetBtn: document.getElementById("reset-btn"),
         catalogSearch: document.getElementById("catalog-search-input"),
-        filterRow: document.getElementById("catalog-filters"),
+        filterSelect: document.getElementById("catalog-filter-select"),
+        sortSelect: document.getElementById("catalog-sort-select"),
+        filterPill: document.getElementById("catalog-filter-pill"),
+        hapticsToggle: document.getElementById("haptics-toggle"),
+        hapticsToggleState: document.getElementById("haptics-toggle-state"),
         catalogList: document.getElementById("catalog-list"),
         bulkHideBtn: document.getElementById("bulk-hide-btn"),
         catalogResetBtn: document.getElementById("catalog-reset-btn"),
@@ -142,10 +168,13 @@
     },
     showToast(message) {
       const toast = document.createElement("div");
-      toast.className = "toast";
+      toast.className = "toast toast-enter";
       toast.textContent = message;
       this.refs.toastRoot.append(toast);
-      setTimeout(() => toast.remove(), UI_CONFIG.toastDurationMs);
+      setTimeout(() => {
+        toast.classList.add("toast-exit");
+        setTimeout(() => toast.remove(), 180);
+      }, UI_CONFIG.toastDurationMs);
     },
   };
 
@@ -154,6 +183,38 @@
     customQuests: storage.loadCustomQuests(),
     hiddenQuestIds: storage.loadHiddenIds(),
     questOverrides: storage.loadOverrides(),
+    settings: storage.loadSettings(),
+    createUi: storage.loadCreateUi(),
+  };
+
+
+  const haptics = {
+    tap() {
+      this.play(10);
+    },
+    success() {
+      this.play([10, 20, 10]);
+    },
+    warning() {
+      this.play([30]);
+    },
+    levelUp() {
+      this.play([12, 24, 12, 20]);
+    },
+    play(pattern) {
+      if (!state.settings.hapticsEnabled) return;
+      if (!navigator || typeof navigator.vibrate !== "function") return;
+      navigator.vibrate(pattern);
+    },
+  };
+
+  const FILTER_LABELS = {
+    all: "Toutes",
+    visible: "Visibles",
+    hidden: "Masquées",
+    seed: "Seed (de base)",
+    custom: "Custom (personnalisées)",
+    overrides: "Modifiées (overrides)",
   };
 
   function sanitizeTitle(value) {
@@ -221,6 +282,7 @@
       const bonus = PROGRESSION.LEVEL_UP_GOLD_BASE_BONUS + (progress.level - 1) * PROGRESSION.LEVEL_UP_GOLD_PER_LEVEL;
       state.game.gold += bonus;
       ui.showToast(`Level up ! +${bonus} Gold`);
+      haptics.levelUp();
     }
     state.game.level = progress.level;
   }
@@ -237,14 +299,17 @@
     if (completed) {
       rollbackCompletedQuest(quest);
       ui.showToast(`-${quest.xp} XP • -${quest.gold} Gold`);
+      haptics.tap();
     } else {
       state.game.completedQuestIds.push(questId);
       applyDelta(quest.xp, quest.gold);
       ui.showToast(`+${quest.xp} XP • +${quest.gold} Gold`);
+      haptics.success();
     }
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    highlightCatalogCard(questId);
   }
 
   function setOverride(id, patch) {
@@ -312,7 +377,7 @@
   }
 
   function getFilteredCatalog() {
-    return catalog.getAllQuestsMerged().filter((quest) => {
+    const filtered = catalog.getAllQuestsMerged().filter((quest) => {
       const text = `${quest.title} ${quest.id}`.toLowerCase();
       const searchOk = text.includes(ui.createSearch.toLowerCase());
       if (!searchOk) return false;
@@ -322,37 +387,26 @@
         hidden: quest.isHidden,
         custom: quest.source === "custom",
         seed: quest.source === "seed",
+        overrides: quest.hasOverride,
       }[ui.createFilter];
       return Boolean(typeFilterOk);
     });
-  }
 
-  function renderCreateFilters() {
-    const filters = [
-      { key: "all", label: "Toutes" },
-      { key: "visible", label: "Visibles" },
-      { key: "hidden", label: "Masquées" },
-      { key: "custom", label: "Custom" },
-      { key: "seed", label: "Seed" },
-    ];
-    ui.refs.filterRow.innerHTML = "";
-    filters.forEach((filter) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = `btn btn-filter ${ui.createFilter === filter.key ? "is-active" : ""}`;
-      btn.textContent = filter.label;
-      btn.dataset.filter = filter.key;
-      ui.refs.filterRow.append(btn);
-    });
+    const sorted = [...filtered];
+    if (ui.createSort === "az") sorted.sort((a, b) => a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
+    if (ui.createSort === "xpDesc") sorted.sort((a, b) => b.xp - a.xp || a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
+    if (ui.createSort === "goldDesc") sorted.sort((a, b) => b.gold - a.gold || a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
+    if (ui.createSort === "recent") sorted.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return sorted;
   }
 
   function renderCreateTab() {
-    renderCreateFilters();
     const list = getFilteredCatalog();
     ui.refs.catalogList.innerHTML = "";
+    ui.refs.filterPill.textContent = `Filtre : ${FILTER_LABELS[ui.createFilter] || FILTER_LABELS.all}`;
     list.forEach((quest) => {
       const card = document.createElement("li");
-      card.className = "catalog-card";
+      card.className = `catalog-card ${quest.isHidden ? "is-hidden" : ""}`;
       card.dataset.questId = quest.id;
       card.innerHTML = `
         <label class="select-check"><input type="checkbox" data-action="select-catalog" data-id="${quest.id}" ${ui.selectedIds.has(quest.id) ? "checked" : ""}/> </label>
@@ -361,14 +415,14 @@
           <div>
             <p class="quest-title">${quest.title}</p>
             <div class="reward-chips"><span class="chip chip-xp">+${quest.xp} XP</span><span class="chip chip-gold">+${quest.gold} Gold</span></div>
-            <div class="reward-chips"><span class="chip">${quest.source === "seed" ? "Seed" : "Custom"}</span><span class="chip">${quest.isHidden ? "Masquée" : "Visible"}</span>${quest.hasOverride ? '<span class="chip">Modifiée</span>' : ""}</div>
+            <div class="reward-chips"><span class="chip ${quest.source === "seed" ? "chip-seed" : "chip-custom"}">${quest.source === "seed" ? "Seed" : "Custom"}</span><span class="chip ${quest.isHidden ? "chip-hidden" : "chip-visible"}">${quest.isHidden ? "Masquée" : "Visible"}</span>${quest.hasOverride ? '<span class="chip chip-override">Modifiée</span>' : ""}</div>
           </div>
         </div>
         <div class="card-actions">
-          <button class="btn btn-secondary" data-action="edit-quest" data-id="${quest.id}">Éditer</button>
-          <button class="btn" data-action="toggle-hidden" data-id="${quest.id}">${quest.isHidden ? "Afficher" : "Masquer"}</button>
-          ${quest.source === "custom" ? `<button class="btn btn-danger" data-action="delete-quest" data-id="${quest.id}">Supprimer</button>` : ""}
-          ${quest.hasOverride ? `<button class="btn" data-action="restore-quest" data-id="${quest.id}">Restaurer</button>` : ""}
+          <button class="btn btn-secondary" data-action="edit-quest" data-id="${quest.id}">✏️ Éditer</button>
+          <button class="btn" data-action="toggle-hidden" data-id="${quest.id}">${quest.isHidden ? "👁️ Afficher" : "🙈 Masquer"}</button>
+          ${quest.source === "custom" ? `<button class="btn btn-danger" data-action="delete-quest" data-id="${quest.id}">🗑️ Supprimer</button>` : ""}
+          ${quest.hasOverride ? `<button class="btn" data-action="restore-quest" data-id="${quest.id}">↩️ Restaurer</button>` : ""}
         </div>`;
       ui.refs.catalogList.append(card);
     });
@@ -429,9 +483,13 @@
     const payload = validation.value;
 
     if (ui.editor.mode === "create") {
-      state.customQuests.push({ id: createQuestId(), ...payload, createdAt: Date.now() });
+      const createdId = createQuestId();
+      state.customQuests.push({ id: createdId, ...payload, createdAt: Date.now() });
       persistCatalog();
       ui.showToast("Enregistré ✅");
+      haptics.success();
+      ui.selectedIds.clear();
+      ui.selectedIds.add(createdId);
     } else {
       const quest = getQuestById(ui.editor.questId);
       if (!quest) return;
@@ -446,12 +504,14 @@
       persistCatalog();
       storage.saveState(state.game);
       ui.showToast("Enregistré ✅");
+      haptics.success();
     }
 
     cleanupCompletedIds();
     closeQuestEditor();
     renderTodayTab();
     renderCreateTab();
+    highlightCatalogCard(ui.editor.mode === "edit" ? ui.editor.questId : Array.from(ui.selectedIds)[0]);
   }
 
   function handleToggleHidden(id) {
@@ -462,10 +522,12 @@
       if (rollback) rollbackCompletedQuest(quest);
     }
     toggleHidden(id);
+    haptics.tap();
     cleanupCompletedIds();
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    highlightCatalogCard(id);
   }
 
   function deleteCustomQuest(id) {
@@ -484,6 +546,7 @@
     renderTodayTab();
     renderCreateTab();
     ui.showToast("Habitude supprimée");
+    haptics.warning();
   }
 
   function resetProgressOnly() {
@@ -509,6 +572,15 @@
     ui.showToast("Catalogue réinitialisé");
   }
 
+
+  function highlightCatalogCard(questId) {
+    if (!questId) return;
+    const card = ui.refs.catalogList.querySelector(`[data-quest-id="${questId}"]`);
+    if (!card) return;
+    card.classList.add("is-highlighted");
+    setTimeout(() => card.classList.remove("is-highlighted"), 700);
+  }
+
   function attachEvents() {
     ui.refs.tabButtons.forEach((button) => {
       button.addEventListener("click", () => {
@@ -530,11 +602,25 @@
       renderCreateTab();
     });
 
-    ui.refs.filterRow.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-filter]");
-      if (!button) return;
-      ui.createFilter = button.dataset.filter;
+    ui.refs.filterSelect.addEventListener("change", () => {
+      ui.createFilter = ui.refs.filterSelect.value;
+      state.createUi.filter = ui.createFilter;
+      storage.saveCreateUi(state.createUi);
       renderCreateTab();
+    });
+
+    ui.refs.sortSelect.addEventListener("change", () => {
+      ui.createSort = ui.refs.sortSelect.value;
+      state.createUi.sort = ui.createSort;
+      storage.saveCreateUi(state.createUi);
+      renderCreateTab();
+    });
+
+    ui.refs.hapticsToggle.addEventListener("change", () => {
+      state.settings.hapticsEnabled = ui.refs.hapticsToggle.checked;
+      ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
+      storage.saveSettings(state.settings);
+      if (state.settings.hapticsEnabled) haptics.tap();
     });
 
     ui.refs.catalogList.addEventListener("click", (event) => {
@@ -548,6 +634,7 @@
         clearOverride(id);
         renderTodayTab();
         renderCreateTab();
+        highlightCatalogCard(id);
       }
     });
 
@@ -560,6 +647,7 @@
 
     ui.refs.bulkHideBtn.addEventListener("click", () => {
       Array.from(ui.selectedIds).forEach((id) => toggleHidden(id, true));
+      haptics.tap();
       ui.selectedIds.clear();
       renderTodayTab();
       renderCreateTab();
@@ -571,7 +659,10 @@
 
     ui.refs.editorModal.addEventListener("click", (event) => {
       const close = event.target.closest("[data-action='close-editor']");
-      if (close) closeQuestEditor();
+      if (close) {
+        haptics.tap();
+        closeQuestEditor();
+      }
     });
 
     ui.refs.iconSearch.addEventListener("input", () => {
@@ -608,6 +699,12 @@
 
   function init() {
     ui.bindRefs();
+    ui.createFilter = FILTER_LABELS[state.createUi.filter] ? state.createUi.filter : "all";
+    ui.createSort = ["recent", "az", "xpDesc", "goldDesc"].includes(state.createUi.sort) ? state.createUi.sort : "recent";
+    ui.refs.filterSelect.value = ui.createFilter;
+    ui.refs.sortSelect.value = ui.createSort;
+    ui.refs.hapticsToggle.checked = state.settings.hapticsEnabled;
+    ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
     cleanupCompletedIds();
     attachEvents();
     storage.saveState(state.game);
