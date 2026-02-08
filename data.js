@@ -118,5 +118,15 @@ HRPG.CONFIG = {
   initialGameState: INITIAL_GAME_STATE,
   initialState: { xp: 0, totalXp: 0, level: 1, gold: 0, completedQuestIds: [] },
   progression: { BASE_XP: 50, GROWTH: 1.25, LEVEL_UP_GOLD_BASE_BONUS: 10, LEVEL_UP_GOLD_PER_LEVEL: 2 },
-  ui: { countUpDurationMs: 320, toastDurationMs: 1800, questPopDurationMs: 320, questGlowDurationMs: 540, questToggleCooldownMs: 260 },
+  ui: {
+    countUpDurationMs: 320,
+    toastDurationMs: 1800,
+    questPopDurationMs: 320,
+    questGlowDurationMs: 540,
+    questToggleCooldownMs: 260,
+    levelUpOverlay: {
+      title: "LEVEL UP",
+      ctaLabel: "Continuer",
+    },
+  },
 };

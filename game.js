@@ -306,6 +306,11 @@
         editorRestore: document.getElementById("editor-restore-btn"),
         editorDelete: document.getElementById("editor-delete-btn"),
         toastRoot: document.getElementById("toast-root"),
+        levelUpOverlay: document.getElementById("level-up-overlay"),
+        levelUpTitle: document.getElementById("level-up-title"),
+        levelUpLevel: document.getElementById("level-up-level"),
+        levelUpMessage: document.getElementById("level-up-message"),
+        levelUpCloseBtn: document.getElementById("level-up-close-btn"),
       };
     },
     showToast(message) {
@@ -317,6 +322,19 @@
         toast.classList.add("toast-exit");
         setTimeout(() => toast.remove(), 180);
       }, UI_CONFIG.toastDurationMs);
+    },
+    closeLevelUpOverlay() {
+      this.refs.levelUpOverlay.hidden = true;
+      document.body.classList.remove("modal-open");
+    },
+    showLevelUpOverlay(level, rewardGold) {
+      const overlayConfig = UI_CONFIG.levelUpOverlay || {};
+      this.refs.levelUpTitle.textContent = overlayConfig.title || "LEVEL UP";
+      this.refs.levelUpCloseBtn.textContent = overlayConfig.ctaLabel || "Continuer";
+      this.refs.levelUpLevel.textContent = `Niveau ${level} atteint !`;
+      this.refs.levelUpMessage.textContent = `Récompense: +${rewardGold} Gold`;
+      this.refs.levelUpOverlay.hidden = false;
+      document.body.classList.add("modal-open");
     },
   };
 
@@ -397,6 +415,41 @@
     }
     const xpNeeded = xpForNextLevel(level);
     return { level, xpIntoLevel: remaining, xpNeeded, xpRemaining: Math.max(0, xpNeeded - remaining), ratio: xpNeeded ? remaining / xpNeeded : 0 };
+  }
+
+  function xpNeededToReachLevel(level) {
+    let total = 0;
+    for (let current = 1; current < Math.max(1, level); current += 1) {
+      total += xpForNextLevel(current);
+    }
+    return total;
+  }
+
+  function computeLevelProgressAtLevel(totalXp, level) {
+    const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
+    const floorXp = xpNeededToReachLevel(safeLevel);
+    const xpNeeded = xpForNextLevel(safeLevel);
+    const xpIntoLevel = Math.max(0, Math.min(xpNeeded, Math.floor(Number(totalXp) || 0) - floorXp));
+    return {
+      level: safeLevel,
+      xpIntoLevel,
+      xpNeeded,
+      xpRemaining: Math.max(0, xpNeeded - xpIntoLevel),
+      ratio: xpNeeded ? xpIntoLevel / xpNeeded : 0,
+    };
+  }
+
+  function computeClaimedXpTotal(claims) {
+    const rewardClaims = claims?.rewardClaims && typeof claims.rewardClaims === "object" ? claims.rewardClaims : {};
+    return Object.values(rewardClaims).reduce((acc, claim) => {
+      const xp = Math.max(0, Number(claim?.xp) || 0);
+      return acc + xp;
+    }, 0);
+  }
+
+  function recomputeTotalXp() {
+    state.game.totalXp = computeClaimedXpTotal(state.game.claims);
+    state.game.currencies.totalXp = state.game.totalXp;
   }
 
   function getActiveDateIso() {
@@ -552,19 +605,29 @@
     return catalog.getAllQuestsMerged().find((quest) => quest.id === id);
   }
 
+  function computeLevelUpReward(fromLevel, toLevel) {
+    let totalBonus = 0;
+    for (let level = fromLevel + 1; level <= toLevel; level += 1) {
+      totalBonus += PROGRESSION.LEVEL_UP_GOLD_BASE_BONUS + (level - 1) * PROGRESSION.LEVEL_UP_GOLD_PER_LEVEL;
+    }
+    return totalBonus;
+  }
+
   function applyDelta(xpDelta, goldDelta) {
-    const beforeLevel = state.game.level;
+    const beforeLevel = Math.max(1, Number(state.game.level) || 1);
     state.game.xp = Math.max(0, state.game.xp + xpDelta);
-    state.game.totalXp = Math.max(0, state.game.totalXp + xpDelta);
     state.game.gold = Math.max(0, state.game.gold + goldDelta);
+    recomputeTotalXp();
     const progress = computeLevelProgress(state.game.totalXp);
-    if (progress.level > beforeLevel) {
-      const bonus = PROGRESSION.LEVEL_UP_GOLD_BASE_BONUS + (progress.level - 1) * PROGRESSION.LEVEL_UP_GOLD_PER_LEVEL;
+    const nextLevel = Math.max(beforeLevel, progress.level);
+    if (nextLevel > beforeLevel) {
+      const bonus = computeLevelUpReward(beforeLevel, nextLevel);
       state.game.gold += bonus;
       ui.showToast(`Level up ! +${bonus} Gold`);
+      ui.showLevelUpOverlay(nextLevel, bonus);
       haptics.levelUp();
     }
-    state.game.level = progress.level;
+    state.game.level = nextLevel;
     state.game.currencies.xp = state.game.xp;
     state.game.currencies.totalXp = state.game.totalXp;
     state.game.currencies.gold = state.game.gold;
@@ -726,7 +789,7 @@
     ui.refs.gold.textContent = String(state.game.gold);
     ui.refs.levelBadge.textContent = `Lv ${state.game.level}`;
 
-    const levelProgress = computeLevelProgress(state.game.totalXp);
+    const levelProgress = computeLevelProgressAtLevel(state.game.totalXp, state.game.level);
     ui.refs.levelText.textContent = `XP: ${levelProgress.xpIntoLevel} / ${levelProgress.xpNeeded}`;
     ui.refs.levelBar.style.width = `${Math.round(levelProgress.ratio * 100)}%`;
     ui.refs.levelRemain.textContent = `Reste: ${levelProgress.xpRemaining} XP`;
@@ -1112,6 +1175,21 @@
       closeQuestEditor();
       deleteCustomQuest(ui.editor.questId);
     });
+
+    ui.refs.levelUpOverlay.addEventListener("click", (event) => {
+      if (event.target === ui.refs.levelUpOverlay) ui.closeLevelUpOverlay();
+    });
+
+    ui.refs.levelUpCloseBtn.addEventListener("click", () => {
+      haptics.tap();
+      ui.closeLevelUpOverlay();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      if (ui.refs.levelUpOverlay.hidden) return;
+      ui.closeLevelUpOverlay();
+    });
   }
 
   function init() {
@@ -1126,6 +1204,11 @@
     ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
     ui.refs.debugDateInput.value = state.game.debug.debugDate || "";
     cleanupCompletedIds();
+    recomputeTotalXp();
+    const computedLevel = computeLevelProgress(state.game.totalXp).level;
+    state.game.level = Math.max(state.game.level, computedLevel);
+    state.game.progress.level = state.game.level;
+    state.game.currencies.totalXp = state.game.totalXp;
     handleDayChange();
     attachEvents();
     storage.saveState(state.game);
