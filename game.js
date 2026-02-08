@@ -56,6 +56,40 @@
     };
   }
 
+  function sanitizeCycles(rawCycles) {
+    const raw = rawCycles && typeof rawCycles === "object" ? rawCycles : {};
+    const weeklyRaw = raw.weekly && typeof raw.weekly === "object" ? raw.weekly : {};
+    const monthlyRaw = raw.monthly && typeof raw.monthly === "object" ? raw.monthly : {};
+    const yearlyRaw = raw.yearly && typeof raw.yearly === "object" ? raw.yearly : {};
+    return {
+      weekly: {
+        weekKey: typeof weeklyRaw.weekKey === "string" ? weeklyRaw.weekKey : null,
+        days: weeklyRaw.days && typeof weeklyRaw.days === "object" ? weeklyRaw.days : {},
+        score: Math.max(0, Math.floor(Number(weeklyRaw.score) || 0)),
+        chestTierId: typeof weeklyRaw.chestTierId === "string" ? weeklyRaw.chestTierId : null,
+        chestClaimed: weeklyRaw.chestClaimed === true,
+        bossMaxHp: Math.max(0, Math.floor(Number(weeklyRaw.bossMaxHp) || 0)),
+        bossHp: Math.max(0, Math.floor(Number(weeklyRaw.bossHp) || 0)),
+        bossDefeated: weeklyRaw.bossDefeated === true,
+      },
+      weeklyArchives: Array.isArray(raw.weeklyArchives) ? raw.weeklyArchives.filter((entry) => entry && typeof entry.weekKey === "string") : [],
+      bossStreak: Math.max(0, Math.floor(Number(raw.bossStreak) || 0)),
+      monthly: {
+        monthKey: typeof monthlyRaw.monthKey === "string" ? monthlyRaw.monthKey : null,
+        points: Math.max(0, Math.floor(Number(monthlyRaw.points) || 0)),
+        badgeId: typeof monthlyRaw.badgeId === "string" ? monthlyRaw.badgeId : null,
+      },
+      yearly: {
+        yearKey: typeof yearlyRaw.yearKey === "string" ? yearlyRaw.yearKey : null,
+        points: Math.max(0, Math.floor(Number(yearlyRaw.points) || 0)),
+        relicsUnlocked: Array.isArray(yearlyRaw.relicsUnlocked) ? yearlyRaw.relicsUnlocked.filter((id) => typeof id === "string") : [],
+        milestonesClaimed: Array.isArray(yearlyRaw.milestonesClaimed) ? yearlyRaw.milestonesClaimed.filter((id) => typeof id === "string") : [],
+      },
+      cosmeticInventory: Array.isArray(raw.cosmeticInventory) ? raw.cosmeticInventory.filter((id) => typeof id === "string") : [],
+      badgesUnlocked: Array.isArray(raw.badgesUnlocked) ? raw.badgesUnlocked.filter((id) => typeof id === "string") : [],
+    };
+  }
+
   function normalizeGameState(rawState) {
     const fallback = createInitialGameState();
     if (!rawState || typeof rawState !== "object") return fallback;
@@ -104,6 +138,7 @@
         useDebugDate: rawState.debug?.useDebugDate === true,
         debugDate: typeof rawState.debug?.debugDate === "string" ? rawState.debug.debugDate : null,
       },
+      cycles: sanitizeCycles(rawState.cycles),
     };
 
     next.completedQuestIds = next.quests.completedQuestIds;
@@ -129,6 +164,7 @@
     normalized.progress.streakShield = Math.max(0, Math.min(1, Number(normalized.progress.streakShield) || 0));
     normalized.progress.restDaysUsedByWeek = normalized.progress.restDaysUsedByWeek && typeof normalized.progress.restDaysUsedByWeek === "object" ? normalized.progress.restDaysUsedByWeek : {};
     normalized.progress.vacationDaysRemaining = Math.max(0, Number(normalized.progress.vacationDaysRemaining) || 0);
+    normalized.cycles = sanitizeCycles(normalized.cycles);
     return normalized;
   }
 
@@ -288,6 +324,10 @@
         dailyTierRule: document.getElementById("daily-tier-rule"),
         streakStatus: document.getElementById("streak-status"),
         streakProtections: document.getElementById("streak-protections"),
+        weeklyScoreStatus: document.getElementById("weekly-score-status"),
+        weeklyBossStatus: document.getElementById("weekly-boss-status"),
+        monthlyYearlyStatus: document.getElementById("monthly-yearly-status"),
+        claimWeeklyChestBtn: document.getElementById("claim-weekly-chest-btn"),
         vacationToggle: document.getElementById("vacation-toggle"),
         vacationState: document.getElementById("vacation-state"),
         debugDateToggle: document.getElementById("debug-date-toggle"),
@@ -358,6 +398,7 @@
     createUi: storage.loadCreateUi(),
   };
   state.game.daily = sanitizeDailyState(state.game.daily);
+  state.game.cycles = sanitizeCycles(state.game.cycles);
 
   const haptics = {
     tap() {
@@ -597,6 +638,149 @@
     return toIsoDate(date);
   }
 
+  function getMonthKey(dateKey) {
+    return String(dateKey || "").slice(0, 7);
+  }
+
+  function getYearKey(dateKey) {
+    return String(dateKey || "").slice(0, 4);
+  }
+
+  function getTierPoints(tier) {
+    const points = PROGRESSION_CONFIG.weeklyRules?.tierPoints || {};
+    return Math.max(0, Number(points[tier]) || 0);
+  }
+
+  function getWeeklyChestTier(score) {
+    const tiers = Array.isArray(PROGRESSION_CONFIG.weeklyRules?.chestTiers) ? PROGRESSION_CONFIG.weeklyRules.chestTiers : [];
+    let match = null;
+    tiers.forEach((tier) => {
+      if (score >= (Number(tier.minScore) || 0)) match = tier;
+    });
+    return match;
+  }
+
+  function initializeWeeklyCycle(activeDate) {
+    const weekKey = getWeekKey(activeDate);
+    const weekly = state.game.cycles.weekly;
+    if (weekly.weekKey === weekKey) return;
+    if (weekly.weekKey) {
+      state.game.cycles.weeklyArchives.push({
+        weekKey: weekly.weekKey,
+        score: weekly.score,
+        chestTierId: weekly.chestTierId,
+        chestClaimed: weekly.chestClaimed,
+        bossDefeated: weekly.bossDefeated,
+        bossMaxHp: weekly.bossMaxHp,
+      });
+      state.game.cycles.weeklyArchives = state.game.cycles.weeklyArchives.slice(-16);
+      if (weekly.bossDefeated) state.game.cycles.bossStreak += 1;
+      else state.game.cycles.bossStreak = 0;
+      logEvent('WEEK_ARCHIVED', { archivedWeekKey: weekly.weekKey, score: weekly.score, bossDefeated: weekly.bossDefeated });
+    }
+
+    const bossBaseHp = Math.max(1, Math.floor(Number(PROGRESSION_CONFIG.weeklyRules?.bossRules?.baseHp) || 1));
+    const streakBonus = Math.max(0, state.game.cycles.bossStreak * 2);
+    state.game.cycles.weekly = {
+      weekKey,
+      days: {},
+      score: 0,
+      chestTierId: null,
+      chestClaimed: false,
+      bossMaxHp: bossBaseHp + streakBonus,
+      bossHp: bossBaseHp + streakBonus,
+      bossDefeated: false,
+    };
+    logEvent('WEEK_STARTED', { weekKey, bossHp: state.game.cycles.weekly.bossHp, bossStreak: state.game.cycles.bossStreak });
+  }
+
+  function ensureMonthlyCycle(activeDate) {
+    const monthKey = getMonthKey(activeDate);
+    if (state.game.cycles.monthly.monthKey === monthKey) return;
+    state.game.cycles.monthly.monthKey = monthKey;
+    state.game.cycles.monthly.points = 0;
+    state.game.cycles.monthly.badgeId = null;
+    logEvent('MONTH_STARTED', { monthKey });
+  }
+
+  function ensureYearlyCycle(activeDate) {
+    const yearKey = getYearKey(activeDate);
+    if (state.game.cycles.yearly.yearKey === yearKey) return;
+    state.game.cycles.yearly.yearKey = yearKey;
+    state.game.cycles.yearly.points = 0;
+    state.game.cycles.yearly.relicsUnlocked = [];
+    state.game.cycles.yearly.milestonesClaimed = [];
+    logEvent('YEAR_STARTED', { yearKey });
+  }
+
+  function updateLongTermProgress(dateKey, tier) {
+    const monthlyPointsCfg = PROGRESSION_CONFIG.monthlyRules?.monthlyPoints || {};
+    const monthlyPoints = Math.max(0, Number(monthlyPointsCfg[tier]) || 0);
+    state.game.cycles.monthly.points += monthlyPoints;
+
+    const badge = (PROGRESSION_CONFIG.monthlyRules?.badgeThresholds || []).find((item) => state.game.cycles.monthly.points >= (Number(item.minPoints) || 0));
+    if (badge && state.game.cycles.monthly.badgeId !== badge.id) {
+      state.game.cycles.monthly.badgeId = badge.id;
+      if (!state.game.cycles.badgesUnlocked.includes(badge.id)) state.game.cycles.badgesUnlocked.push(badge.id);
+      const cosmetics = Array.isArray(PROGRESSION_CONFIG.monthlyRules?.cosmetics) ? PROGRESSION_CONFIG.monthlyRules.cosmetics : [];
+      const cosmeticId = cosmetics[Math.min(cosmetics.length - 1, Math.max(0, (badge.id === 'heroic') ? 2 : 1))] || cosmetics[0];
+      if (cosmeticId && !state.game.cycles.cosmeticInventory.includes(cosmeticId)) state.game.cycles.cosmeticInventory.push(cosmeticId);
+      logEvent('MONTH_BADGE_UNLOCKED', { dateKey, badgeId: badge.id, cosmeticId: cosmeticId || null });
+    }
+
+    state.game.cycles.yearly.points += monthlyPoints;
+    const relicEvery = Math.max(1, Number(PROGRESSION_CONFIG.yearlyRules?.relicUnlockEveryPoints) || 180);
+    const relics = Array.isArray(PROGRESSION_CONFIG.yearlyRules?.relics) ? PROGRESSION_CONFIG.yearlyRules.relics : [];
+    const unlockCount = Math.min(relics.length, Math.floor(state.game.cycles.yearly.points / relicEvery));
+    for (let idx = 0; idx < unlockCount; idx += 1) {
+      const relicId = relics[idx];
+      if (relicId && !state.game.cycles.yearly.relicsUnlocked.includes(relicId)) {
+        state.game.cycles.yearly.relicsUnlocked.push(relicId);
+        logEvent('YEAR_RELIC_UNLOCKED', { dateKey, relicId });
+      }
+    }
+
+    (PROGRESSION_CONFIG.yearlyRules?.milestoneRewards || []).forEach((milestone) => {
+      if (state.game.cycles.yearly.points < (Number(milestone.minPoints) || 0)) return;
+      if (state.game.cycles.yearly.milestonesClaimed.includes(milestone.id)) return;
+      state.game.cycles.yearly.milestonesClaimed.push(milestone.id);
+      const tokens = Math.max(0, Number(milestone.tokens) || 0);
+      state.game.currencies.tokens = Math.max(0, Number(state.game.currencies.tokens) || 0) + tokens;
+      logEvent('YEAR_MILESTONE_UNLOCKED', { dateKey, milestoneId: milestone.id, tokens });
+    });
+  }
+
+  function finalizeWeeklyFromTier(dateKey, tier) {
+    const weekly = state.game.cycles.weekly;
+    if (!weekly || weekly.days[dateKey]) return;
+    weekly.days[dateKey] = tier;
+    const tierPoints = getTierPoints(tier);
+    weekly.score += tierPoints;
+    const chestTier = getWeeklyChestTier(weekly.score);
+    weekly.chestTierId = chestTier ? chestTier.id : null;
+
+    const bossEnabled = PROGRESSION_CONFIG.weeklyRules?.bossRules?.enabled;
+    if (bossEnabled && !weekly.bossDefeated) {
+      weekly.bossHp = Math.max(0, weekly.bossHp - tierPoints);
+      weekly.bossDefeated = weekly.bossHp <= 0;
+    }
+
+    updateLongTermProgress(dateKey, tier);
+    logEvent('WEEK_DAY_RECORDED', { dateKey, tier, tierPoints, weeklyScore: weekly.score, chestTierId: weekly.chestTierId, bossHp: weekly.bossHp, bossDefeated: weekly.bossDefeated });
+  }
+
+  function claimWeeklyChestReward() {
+    const weekly = state.game.cycles.weekly;
+    if (weekly.chestClaimed) return { ok: false, reason: 'already_claimed' };
+    const chestTier = getWeeklyChestTier(weekly.score);
+    if (!chestTier) return { ok: false, reason: 'no_chest' };
+    weekly.chestClaimed = true;
+    state.game.claims.chestClaims[weekly.weekKey] = { claimedAt: new Date().toISOString(), chestTierId: chestTier.id };
+    applyDelta(Math.max(0, Number(chestTier.bonusXp) || 0), Math.max(0, Number(chestTier.bonusGold) || 0));
+    logEvent('WEEK_CHEST_CLAIMED', { weekKey: weekly.weekKey, chestTierId: chestTier.id });
+    return { ok: true, chestTier };
+  }
+
   function refillMonthlyShieldIfNeeded(activeDate) {
     const monthKey = activeDate.slice(0, 7);
     if (state.game.progress.lastShieldRefillMonth === monthKey) return;
@@ -610,6 +794,7 @@
 
   function finalizePreviousDay(prevDate) {
     const previousTier = state.game.daily.tier || "none";
+    finalizeWeeklyFromTier(prevDate, previousTier);
     if (state.game.daily.vacationMode) {
       logEvent("STREAK_DAY_CLOSED", { prevDate, previousTier, result: "vacation_freeze", streak: state.game.progress.streak });
       return;
@@ -643,6 +828,9 @@
   function handleDayChange() {
     const activeDate = getActiveDateIso();
     refillMonthlyShieldIfNeeded(activeDate);
+    initializeWeeklyCycle(activeDate);
+    ensureMonthlyCycle(activeDate);
+    ensureYearlyCycle(activeDate);
     if (state.game.progress.lastActiveDate === activeDate) return;
     if (state.game.progress.lastActiveDate) {
       finalizePreviousDay(state.game.progress.lastActiveDate);
@@ -900,6 +1088,14 @@
     ui.refs.dailyTierRule.textContent = `Argent dès ${PROGRESSION_CONFIG.dailyTiers.silver.minObjectives} objectifs • Or dès ${PROGRESSION_CONFIG.dailyTiers.gold.minObjectives} objectifs`;
     ui.refs.streakStatus.textContent = `Streak: ${state.game.progress.streak} jour(s)`;
     ui.refs.streakProtections.textContent = `Shield: ${state.game.progress.streakShield}/1 • Rest cette semaine: ${Math.max(0, Number(state.game.progress.restDaysUsedByWeek[getWeekKey(getActiveDateIso())]) || 0)}/${Math.max(0, Number(PROGRESSION_CONFIG.streakRules?.restDayRules?.maxPerWeek) || 0)} • Vacances restantes: ${state.game.progress.vacationDaysRemaining}`;
+
+    const weekly = state.game.cycles.weekly;
+    const chestTier = getWeeklyChestTier(weekly.score);
+    ui.refs.weeklyScoreStatus.textContent = `Score hebdo: ${weekly.score} • Coffre: ${chestTier ? chestTier.id : "aucun"}${weekly.chestClaimed ? " (claim)" : ""}`;
+    ui.refs.weeklyBossStatus.textContent = `Boss: ${Math.max(0, weekly.bossHp)} / ${weekly.bossMaxHp} • Streak boss: ${state.game.cycles.bossStreak}`;
+    ui.refs.monthlyYearlyStatus.textContent = `Badge: ${state.game.cycles.monthly.badgeId || "-"} • Reliques: ${state.game.cycles.yearly.relicsUnlocked.length} • Milestones: ${state.game.cycles.yearly.milestonesClaimed.length}`;
+    ui.refs.claimWeeklyChestBtn.disabled = !chestTier || weekly.chestClaimed;
+
     ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
     ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
     ui.refs.debugDateState.textContent = state.game.debug.useDebugDate ? "ON" : "OFF";
@@ -1233,6 +1429,19 @@
     ui.refs.newQuestBtn.addEventListener("click", () => openQuestEditor("create"));
     ui.refs.resetBtn.addEventListener("click", resetProgressOnly);
     ui.refs.catalogResetBtn.addEventListener("click", resetCatalogOnly);
+    ui.refs.claimWeeklyChestBtn.addEventListener("click", () => {
+      const result = claimWeeklyChestReward();
+      if (result.ok) {
+        ui.showToast(`Coffre ${result.chestTier.id} ouvert : +${result.chestTier.bonusXp} XP • +${result.chestTier.bonusGold} Gold`);
+        haptics.success();
+      } else if (result.reason === "already_claimed") {
+        ui.showToast("Coffre hebdo déjà récupéré.");
+      } else {
+        ui.showToast("Score hebdo insuffisant pour le coffre.");
+      }
+      storage.saveState(state.game);
+      renderTodayTab();
+    });
 
     ui.refs.editorModal.addEventListener("click", (event) => {
       const close = event.target.closest("[data-action='close-editor']");
