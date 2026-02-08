@@ -360,6 +360,7 @@ h1 {
 .btn {
   border: 0;
   border-radius: 14px;
+  min-height: 44px;
   padding: 0.68rem 1rem;
   font-weight: 800;
   cursor: pointer;
@@ -422,7 +423,14 @@ h1 {
   color: #eef4ff;
   border: 1px solid rgba(193, 212, 255, 0.48);
   background: rgba(10, 24, 61, 0.92);
+}
+
+.toast-enter {
   animation: toast-in 200ms ease;
+}
+
+.toast-exit {
+  animation: toast-out 180ms ease forwards;
 }
 
 @keyframes toast-in {
@@ -433,6 +441,17 @@ h1 {
   to {
     transform: translateY(0);
     opacity: 1;
+  }
+}
+
+@keyframes toast-out {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(8px);
+    opacity: 0;
   }
 }
 
@@ -666,6 +685,18 @@ h1 {
 }
 
 @media (max-width: 620px) {
+  .toolbar-row-controls {
+    align-items: stretch;
+  }
+
+  .control-field {
+    min-width: 100%;
+  }
+
+  .card-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .form-grid {
     grid-template-columns: 1fr;
   }
@@ -682,6 +713,67 @@ h1 {
   gap: 0.75rem;
   margin-bottom: 1rem;
 }
+
+
+.toolbar-row-controls {
+  align-items: flex-end;
+}
+
+.control-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 210px;
+  font-weight: 700;
+  color: #dce8ff;
+  flex: 1 1 210px;
+}
+
+.control-field select,
+.toolbar-row input[type="search"] {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(206, 223, 255, 0.35);
+  background: rgba(14, 33, 82, 0.8);
+  color: var(--text);
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+}
+
+.control-field select:focus-visible,
+.toolbar-row input[type="search"]:focus-visible,
+.toggle-field:focus-within {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.filter-pill {
+  margin: 0;
+  align-self: center;
+  border: 1px solid rgba(134, 255, 171, 0.45);
+  background: rgba(88, 204, 108, 0.18);
+  color: #defee6;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.toggle-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(206, 223, 255, 0.35);
+  padding: 0.4rem 0.75rem;
+  background: rgba(14, 33, 82, 0.65);
+}
+
+.toggle-field input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
 
 .toolbar-row {
   display: flex;
@@ -727,6 +819,16 @@ h1 {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 0.7rem;
+  transition: box-shadow 220ms ease, border-color 220ms ease, opacity 220ms ease;
+}
+
+.catalog-card.is-hidden {
+  opacity: 0.72;
+}
+
+.catalog-card.is-highlighted {
+  border-color: rgba(149, 239, 169, 0.85);
+  box-shadow: 0 0 0 4px rgba(93, 222, 142, 0.2);
 }
 
 .select-check {
@@ -735,9 +837,36 @@ h1 {
 
 .card-actions {
   grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.45rem;
+}
+
+.card-actions .btn {
+  width: 100%;
+}
+
+.chip-visible {
+  border-color: rgba(149, 239, 169, 0.8);
+  background: rgba(88, 204, 108, 0.18);
+}
+
+.chip-hidden {
+  border-color: rgba(255, 193, 146, 0.78);
+  background: rgba(255, 145, 90, 0.16);
+}
+
+.chip-seed {
+  border-color: rgba(124, 166, 255, 0.72);
+}
+
+.chip-custom {
+  border-color: rgba(197, 177, 255, 0.72);
+}
+
+.chip-override {
+  border-color: rgba(255, 212, 94, 0.82);
+  background: rgba(255, 212, 94, 0.16);
 }
 
 .editor-modal {

@@ -71,7 +71,34 @@
               <input id="catalog-search-input" type="search" placeholder="Rechercher une habitude…" />
               <button id="new-quest-btn" class="btn btn-primary" type="button">+ Nouvelle habitude</button>
             </div>
-            <div id="catalog-filters" class="filter-row" role="tablist" aria-label="Filtres catalogue"></div>
+            <div class="toolbar-row toolbar-row-controls">
+              <label class="control-field" for="catalog-filter-select">Afficher :
+                <select id="catalog-filter-select">
+                  <option value="all">Toutes</option>
+                  <option value="visible">Visibles</option>
+                  <option value="hidden">Masquées</option>
+                  <option value="seed">Seed (de base)</option>
+                  <option value="custom">Custom (personnalisées)</option>
+                  <option value="overrides">Modifiées (overrides)</option>
+                </select>
+              </label>
+              <label class="control-field" for="catalog-sort-select">Trier :
+                <select id="catalog-sort-select">
+                  <option value="recent">Récentes</option>
+                  <option value="az">A–Z</option>
+                  <option value="xpDesc">XP décroissant</option>
+                  <option value="goldDesc">Gold décroissant</option>
+                </select>
+              </label>
+              <p id="catalog-filter-pill" class="filter-pill" aria-live="polite"></p>
+            </div>
+            <div class="toolbar-row">
+              <label class="toggle-field" for="haptics-toggle">
+                <span>Vibrations :</span>
+                <input id="haptics-toggle" type="checkbox" role="switch" />
+                <strong id="haptics-toggle-state">ON</strong>
+              </label>
+            </div>
             <div class="toolbar-row">
               <button id="bulk-hide-btn" class="btn" type="button">Masquer la sélection</button>
               <button id="catalog-reset-btn" class="btn btn-danger" type="button">Réinitialiser mon catalogue</button>
