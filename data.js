@@ -1,40 +1,55 @@
 window.HRPG = window.HRPG || {};
 
 HRPG.CONFIG = {
-  quests: [
+  BASE_QUESTS: [
     { id: "water", title: "Boire 1L d'eau", xp: 10, gold: 5, icon: "water", createdAt: 1 },
     { id: "walk", title: "Marcher 20 minutes", xp: 20, gold: 10, icon: "walk", createdAt: 2 },
     { id: "read", title: "Lire 15 minutes", xp: 15, gold: 8, icon: "book", createdAt: 3 },
   ],
-  icons: ["water", "walk", "book", "gym", "meditation", "cleanup", "work", "music"],
-  initialState: {
-    xp: 0,
-    totalXp: 0,
-    level: 1,
-    gold: 0,
-    completedQuestIds: [],
-  },
-  progression: {
-    BASE_XP: 50,
-    GROWTH: 1.25,
-    LEVEL_UP_GOLD_BASE_BONUS: 10,
-    LEVEL_UP_GOLD_PER_LEVEL: 2,
-  },
-  ui: {
-    countUpDurationMs: 320,
-    toastDurationMs: 1800,
-    confettiDurationMs: 820,
-    confettiPieces: 16,
-    questPopDurationMs: 320,
-    questGlowDurationMs: 540,
-    questToggleCooldownMs: 260,
-  },
+  ICON_CATALOG: [
+    { key: "water", label: "Eau", svg: '<svg viewBox="0 0 24 24"><path d="M12 2c3.3 4.1 6.5 7.5 6.5 11.2A6.5 6.5 0 1 1 5.5 13.2C5.5 9.5 8.7 6.1 12 2z"/></svg>' },
+    { key: "walk", label: "Marche", svg: '<svg viewBox="0 0 24 24"><circle cx="14" cy="5" r="2.5"/><path d="M7 13.5 11 9l2 1.5V15l2.6 4H13l-2.4-3.5L8.4 18H6l2.1-4.5z"/></svg>' },
+    { key: "book", label: "Lecture", svg: '<svg viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11c1.3 0 2.4.4 3 1.2.7-.8 1.8-1.2 3-1.2h1.5A1.5 1.5 0 0 1 20 5.5V18a1 1 0 0 1-1 1H17c-1.2 0-2.3.4-3 1.2-.7-.8-1.8-1.2-3-1.2H5a1 1 0 0 1-1-1z"/></svg>' },
+    { key: "gym", label: "Sport", svg: '<svg viewBox="0 0 24 24"><path d="M2 10h3v4H2zm17 0h3v4h-3zM6 8h2v8H6zm10 0h2v8h-2zm-7 3h6v2H9z"/></svg>' },
+    { key: "meditation", label: "Méditation", svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.3"/><path d="M7.2 13.5c1.2-2 2.8-3.1 4.8-3.1s3.6 1.1 4.8 3.1L15 15.2c-.8-1.2-1.8-1.9-3-1.9s-2.2.7-3 1.9zM6 19c0-2.4 2.6-3.8 6-3.8s6 1.4 6 3.8v1H6z"/></svg>' },
+    { key: "cleanup", label: "Ménage", svg: '<svg viewBox="0 0 24 24"><path d="M8 5h8l-.7 14.2a2 2 0 0 1-2 1.8h-2.6a2 2 0 0 1-2-1.8zM6 5h12v2H6zm3-2h6v2H9z"/></svg>' },
+    { key: "work", label: "Travail", svg: '<svg viewBox="0 0 24 24"><path d="M4 7h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zm5-3h6a2 2 0 0 1 2 2v1H7V6a2 2 0 0 1 2-2z"/></svg>' },
+    { key: "music", label: "Musique", svg: '<svg viewBox="0 0 24 24"><path d="M15 4v10.8a3.2 3.2 0 1 1-2-3V7.3l8-2v8.5a3.2 3.2 0 1 1-2-3V4z"/></svg>' },
+    { key: "sleep", label: "Sommeil", svg: '<svg viewBox="0 0 24 24"><path d="M15.5 3a8.5 8.5 0 1 0 5.5 15.1A7 7 0 1 1 15.5 3z"/></svg>' },
+    { key: "run", label: "Course", svg: '<svg viewBox="0 0 24 24"><circle cx="14.5" cy="4.5" r="2.2"/><path d="m7 11 4-2 2 1.5 2.8.5-.4 2-2.4-.4L11 16l-3.2 2H5l4-3z"/></svg>' },
+    { key: "bike", label: "Vélo", svg: '<svg viewBox="0 0 24 24"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M10 6h3l2 4h3v2h-4l-2-4h-1l-2 4"/></svg>' },
+    { key: "yoga", label: "Yoga", svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><path d="M4 18c0-2.2 2.6-3.7 8-3.7s8 1.5 8 3.7v1H4zM9 12l3-2 3 2-1 2h-4z"/></svg>' },
+    { key: "stretch", label: "Étirement", svg: '<svg viewBox="0 0 24 24"><path d="M4 13h16v2H4zM8 7h8v2H8zM6 17h12v2H6z"/></svg>' },
+    { key: "fruit", label: "Fruit", svg: '<svg viewBox="0 0 24 24"><path d="M12 7c4 0 7 2.6 7 6.2S16 20 12 20s-7-2.4-7-6.8S8 7 12 7zm1-4h4l-2.5 3H11z"/></svg>' },
+    { key: "meal", label: "Repas sain", svg: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 1 16 0H4zm1 2h14v2H5zm2 3h10v2H7z"/></svg>' },
+    { key: "no-sugar", label: "Sans sucre", svg: '<svg viewBox="0 0 24 24"><path d="M6 7h12v10H6z"/><path d="m4 4 16 16" stroke="currentColor" stroke-width="2" fill="none"/></svg>' },
+    { key: "coding", label: "Code", svg: '<svg viewBox="0 0 24 24"><path d="m8 8-4 4 4 4 1.4-1.4L6.8 12l2.6-2.6zm8 0-1.4 1.4 2.6 2.6-2.6 2.6L16 16l4-4zM11 18h2l2-12h-2z"/></svg>' },
+    { key: "mail", label: "Email", svg: '<svg viewBox="0 0 24 24"><path d="M3 6h18v12H3z"/><path d="m3 7 9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "calendar", label: "Planning", svg: '<svg viewBox="0 0 24 24"><path d="M4 5h16v15H4zM8 3v4M16 3v4M4 9h16" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "focus", label: "Focus", svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2"/></svg>' },
+    { key: "phone-off", label: "Moins écran", svg: '<svg viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="m4 4 16 16" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "journal", label: "Journal", svg: '<svg viewBox="0 0 24 24"><path d="M6 4h11a2 2 0 0 1 2 2v14H8a2 2 0 0 0-2 2z"/><path d="M8 4v18" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "gratitude", label: "Gratitude", svg: '<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.6-7-10a4 4 0 0 1 7-2 4 4 0 0 1 7 2c0 5.4-7 10-7 10z"/></svg>' },
+    { key: "sun", label: "Matin", svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17 4.9 19.1" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "moon", label: "Soir", svg: '<svg viewBox="0 0 24 24"><path d="M15.5 3a9 9 0 1 0 5.5 15.2A8 8 0 1 1 15.5 3z"/></svg>' },
+    { key: "teeth", label: "Dents", svg: '<svg viewBox="0 0 24 24"><path d="M6 5c2-1 4-1 6 0 2-1 4-1 6 0 1 2 1 5 0 8-.6 1.8-1.6 3-2.8 3-1.2 0-1.5-2.3-3.2-2.3S10 16 8.8 16C7.6 16 6.6 14.8 6 13c-1-3-1-6 0-8z"/></svg>' },
+    { key: "shower", label: "Douche", svg: '<svg viewBox="0 0 24 24"><path d="M4 11a5 5 0 0 1 10 0v1H4zM7 14v2M10 14v2M13 14v2" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "home", label: "Maison", svg: '<svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v9H4z"/><path d="M10 20v-6h4v6"/></svg>' },
+    { key: "study", label: "Études", svg: '<svg viewBox="0 0 24 24"><path d="m3 9 9-4 9 4-9 4zM6 11v5c0 1.5 3 3 6 3s6-1.5 6-3v-5"/></svg>' },
+    { key: "language", label: "Langue", svg: '<svg viewBox="0 0 24 24"><path d="M4 6h8v8H4zM12 10h8v8h-8z"/><path d="M6 12h4M14 16h4" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "money", label: "Budget", svg: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>' },
+    { key: "plant", label: "Plante", svg: '<svg viewBox="0 0 24 24"><path d="M12 21v-7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 14c-4 0-6-3-6-7 4 0 6 3 6 7zm0 0c4 0 6-3 6-7-4 0-6 3-6 7z"/></svg>' },
+    { key: "trash", label: "Rangement", svg: '<svg viewBox="0 0 24 24"><path d="M8 6h8l-1 14H9zM6 6h12M9 4h6"/></svg>' },
+    { key: "pet", label: "Animal", svg: '<svg viewBox="0 0 24 24"><circle cx="8" cy="8" r="2"/><circle cx="16" cy="8" r="2"/><circle cx="6" cy="12" r="1.7"/><circle cx="18" cy="12" r="1.7"/><path d="M12 20c3 0 5-2 5-4a5 5 0 1 0-10 0c0 2 2 4 5 4z"/></svg>' },
+    { key: "family", label: "Famille", svg: '<svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2"/><circle cx="17" cy="8" r="2"/><circle cx="12" cy="6" r="2.2"/><path d="M3 19c0-2.6 2.4-4.2 4-4.2 1.8 0 3.2.7 5 2 1.8-1.3 3.2-2 5-2 1.6 0 4 1.6 4 4.2v1H3z"/></svg>' },
+    { key: "call", label: "Appel", svg: '<svg viewBox="0 0 24 24"><path d="M6 3h4l1 5-2 2a14 14 0 0 0 5 5l2-2 5 1v4c0 1-1 2-2 2C10.8 20 4 13.2 4 5a2 2 0 0 1 2-2z"/></svg>' },
+    { key: "spark", label: "Motivation", svg: '<svg viewBox="0 0 24 24"><path d="m12 2 2.4 6.1L21 10l-5.1 4.1L17.7 21 12 17.3 6.3 21l1.8-6.9L3 10l6.6-1.9z"/></svg>' },
+    { key: "target", label: "Objectif", svg: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="1.8"/></svg>' },
+    { key: "checklist", label: "Checklist", svg: '<svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m7 10 2 2 3-3M12 10h5M7 15l2 2 3-3M12 15h5" fill="none" stroke="currentColor" stroke-width="2"/></svg>' },
+    { key: "brain", label: "Deep work", svg: '<svg viewBox="0 0 24 24"><path d="M8 6a3 3 0 0 1 5-2 3.2 3.2 0 0 1 5 2.5 2.8 2.8 0 0 1 2 2.7 2.8 2.8 0 0 1-1 2.2 2.6 2.6 0 0 1 .8 1.9A3.2 3.2 0 0 1 16.6 17H7.8A3.8 3.8 0 0 1 4 13.2 3 3 0 0 1 5 11 3.2 3.2 0 0 1 8 6z"/></svg>' },
+    { key: "star", label: "Favori", svg: '<svg viewBox="0 0 24 24"><path d="M12 2 9.3 8.2 2.5 9l5 4.5L6.3 21 12 17.7 17.7 21l-1.2-7.5 5-4.5-6.8-.8z"/></svg>' },
+  ],
+  initialState: { xp: 0, totalXp: 0, level: 1, gold: 0, completedQuestIds: [] },
+  progression: { BASE_XP: 50, GROWTH: 1.25, LEVEL_UP_GOLD_BASE_BONUS: 10, LEVEL_UP_GOLD_PER_LEVEL: 2 },
+  ui: { countUpDurationMs: 320, toastDurationMs: 1800, questPopDurationMs: 320, questGlowDurationMs: 540, questToggleCooldownMs: 260 },
 };
-
-// Compat temporaire : conserve les alias globaux existants pour éviter toute casse
-// durant la migration progressive vers HRPG.CONFIG.
-const BASE_QUESTS = HRPG.CONFIG.quests;
-const ICON_OPTIONS = HRPG.CONFIG.icons;
-const INITIAL_STATE = HRPG.CONFIG.initialState;
-const PROGRESSION = HRPG.CONFIG.progression;
-const UI_CONFIG = HRPG.CONFIG.ui;
