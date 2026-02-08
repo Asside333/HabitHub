@@ -307,6 +307,7 @@
     createSearch: "",
     iconSearch: "",
     selectedIds: new Set(),
+    todayAdvancedExpanded: false,
     editor: { open: false, mode: "create", questId: null, icon: ICON_CATALOG[0].key },
     bindRefs() {
       this.refs = {
@@ -331,12 +332,16 @@
         weeklyBossStatus: document.getElementById("weekly-boss-status"),
         monthlyYearlyStatus: document.getElementById("monthly-yearly-status"),
         claimWeeklyChestBtn: document.getElementById("claim-weekly-chest-btn"),
+        advancedProgressToggle: document.getElementById("advanced-progress-toggle"),
+        advancedProgressToggleLabel: document.getElementById("advanced-progress-toggle-label"),
+        advancedProgressPanel: document.getElementById("advanced-progress-panel"),
         vacationToggle: document.getElementById("vacation-toggle"),
         vacationState: document.getElementById("vacation-state"),
         debugDateToggle: document.getElementById("debug-date-toggle"),
         debugDateState: document.getElementById("debug-date-state"),
         debugDateInput: document.getElementById("debug-date-input"),
         activeDateLabel: document.getElementById("active-date-label"),
+        devTechInfo: document.getElementById("dev-tech-info"),
         vacationRemainingLabel: document.getElementById("vacation-remaining-label"),
         developerModeToggle: document.getElementById("developer-mode-toggle"),
         developerModeState: document.getElementById("developer-mode-state"),
@@ -1104,6 +1109,10 @@
     ui.refs.monthlyYearlyStatus.textContent = `Badge: ${state.game.cycles.monthly.badgeId || "-"} • Reliques: ${state.game.cycles.yearly.relicsUnlocked.length} • Milestones: ${state.game.cycles.yearly.milestonesClaimed.length}`;
     ui.refs.claimWeeklyChestBtn.disabled = !chestTier || weekly.chestClaimed;
 
+    ui.refs.advancedProgressPanel.hidden = !ui.todayAdvancedExpanded;
+    ui.refs.advancedProgressToggle.setAttribute("aria-expanded", ui.todayAdvancedExpanded ? "true" : "false");
+    ui.refs.advancedProgressToggleLabel.textContent = ui.todayAdvancedExpanded ? "Masquer" : "Afficher";
+
     renderSettingsTab();
 
     renderStats();
@@ -1136,6 +1145,7 @@
     }
 
     ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
+    ui.refs.devTechInfo.textContent = `Clé save: ${storage.keys.save} • Schéma: v${state.game.v}`;
   }
 
   function getFilteredCatalog() {
@@ -1427,6 +1437,11 @@
       storage.saveState(state.game);
       renderTodayTab();
       renderSettingsTab();
+    });
+
+    ui.refs.advancedProgressToggle.addEventListener("click", () => {
+      ui.todayAdvancedExpanded = !ui.todayAdvancedExpanded;
+      renderTodayTab();
     });
 
     ui.refs.vacationToggle.addEventListener("change", () => {
