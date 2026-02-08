@@ -164,8 +164,6 @@ h1 {
   border-color: rgba(149, 239, 169, 0.72);
 }
 
-
-
 .xp-hero {
   --xp-accent: #5ca5ff;
   margin-top: 0;
@@ -378,7 +376,6 @@ h1 {
   background: linear-gradient(90deg, #7ca6ff, #9fbeff);
 }
 
-
 .progress-subtext {
   margin-top: 0.45rem;
   color: #d7e4ff;
@@ -531,7 +528,6 @@ h1 {
   0% { transform: translateY(-50%) scale(0.7); opacity: 0.95; box-shadow: 0 0 0 0 rgba(176, 255, 201, 0.55); }
   100% { transform: translateY(-50%) scale(1.7); opacity: 0; box-shadow: 0 0 0 14px rgba(176, 255, 201, 0); }
 }
-
 
 .btn {
   --btn-bg: var(--ghost-bg);
@@ -770,7 +766,6 @@ h1 {
   }
 }
 
-
 .level-up-glow {
   box-shadow: 0 0 0 4px rgba(145, 244, 168, 0.35), 0 0 18px rgba(145, 244, 168, 0.6);
 }
@@ -860,6 +855,11 @@ body.reduce-motion .xp-shine {
   animation: none !important;
 }
 
+body.reduce-motion .progress-fill,
+body.reduce-motion .xp-hero-fill {
+  transition: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -886,6 +886,7 @@ body.reduce-motion .xp-shine {
 
 .tab-btn {
   width: 100%;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -907,6 +908,10 @@ body.reduce-motion .xp-shine {
 
 .nav-label {
   font-size: 0.88rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab-btn.is-active {
@@ -1026,7 +1031,6 @@ body.reduce-motion .xp-shine {
   margin-bottom: 1rem;
 }
 
-
 .toolbar-row-controls {
   align-items: flex-end;
 }
@@ -1085,7 +1089,6 @@ body.reduce-motion .xp-shine {
   width: 1.2rem;
   height: 1.2rem;
 }
-
 
 .toolbar-row {
   display: flex;
@@ -1257,7 +1260,6 @@ body.reduce-motion .xp-shine {
   }
 }
 
-
 .debug-date-panel {
   margin-top: var(--space-3);
   border-radius: var(--radius-md);
@@ -1272,9 +1274,6 @@ body.reduce-motion .xp-shine {
   width: 100%;
   min-height: 2.5rem;
 }
-
-
-
 
 .manage-panel {
   display: grid;
@@ -1304,7 +1303,6 @@ body.reduce-motion .xp-shine {
   flex-wrap: wrap;
 }
 
-
 .toast-close:focus-visible,
 .progress-card summary:focus-visible {
   outline: none;
@@ -1327,11 +1325,12 @@ body.reduce-motion .xp-shine {
 
 @media (max-width: 620px) {
   .app-shell {
-    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+    padding-bottom: calc(92px + env(safe-area-inset-bottom));
   }
 
   .tabs.app-nav {
     position: fixed;
+    max-width: calc(100vw - 1.2rem);
     left: 0.6rem;
     right: 0.6rem;
     bottom: calc(0.6rem + env(safe-area-inset-bottom));
