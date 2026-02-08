@@ -1,10 +1,102 @@
 (function initHabitHub() {
-  const { BASE_QUESTS, ICON_CATALOG, initialState: INITIAL_STATE, progression: PROGRESSION, ui: UI_CONFIG } = HRPG.CONFIG;
+  const { BASE_QUESTS, ICON_CATALOG, initialGameState: INITIAL_GAME_STATE, progressionConfig: PROGRESSION_CONFIG, progression: PROGRESSION, ui: UI_CONFIG } = HRPG.CONFIG;
+
+  function cloneJson(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function toIsoDate(date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  function createInitialGameState() {
+    const seed = cloneJson(INITIAL_GAME_STATE);
+    seed.quests.completedQuestIds = Array.isArray(seed.quests.completedQuestIds) ? seed.quests.completedQuestIds : [];
+    seed.completedQuestIds = seed.quests.completedQuestIds;
+    seed.xp = seed.currencies.xp;
+    seed.gold = seed.currencies.gold;
+    seed.totalXp = seed.currencies.totalXp;
+    seed.level = seed.progress.level;
+    return seed;
+  }
+
+  function sanitizeEventLog(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter((entry) => entry && typeof entry.type === "string").slice(-200);
+  }
+
+  function normalizeGameState(rawState) {
+    const fallback = createInitialGameState();
+    if (!rawState || typeof rawState !== "object") return fallback;
+
+    const legacyCompleted = Array.isArray(rawState.completedQuestIds) ? rawState.completedQuestIds : [];
+    const nestedCompleted = rawState.quests && Array.isArray(rawState.quests.completedQuestIds) ? rawState.quests.completedQuestIds : legacyCompleted;
+    const completedQuestIds = nestedCompleted.filter((id) => typeof id === "string");
+
+    const totalXp = Math.max(0, Number(rawState.totalXp ?? rawState.currencies?.totalXp ?? rawState.xp ?? rawState.currencies?.xp) || 0);
+    const progressData = computeLevelProgress(totalXp);
+    const xp = Math.max(0, Number(rawState.xp ?? rawState.currencies?.xp) || 0);
+    const gold = Math.max(0, Number(rawState.gold ?? rawState.currencies?.gold) || 0);
+    const level = Math.max(progressData.level, Number(rawState.level ?? rawState.progress?.level) || 1);
+
+    const next = {
+      v: Number(rawState.v) || 1,
+      currencies: {
+        xp,
+        gold,
+        totalXp,
+        tokens: Math.max(0, Number(rawState.currencies?.tokens) || 0),
+      },
+      progress: {
+        level,
+        streak: Math.max(0, Number(rawState.progress?.streak) || 0),
+        lastActiveDate: typeof rawState.progress?.lastActiveDate === "string" ? rawState.progress.lastActiveDate : null,
+        lastTier: typeof rawState.progress?.lastTier === "string" ? rawState.progress.lastTier : "none",
+        streakShield: Math.max(0, Number(rawState.progress?.streakShield) || 0),
+      },
+      quests: {
+        completedQuestIds,
+      },
+      claims: {
+        rewardClaims: rawState.claims?.rewardClaims && typeof rawState.claims.rewardClaims === "object" ? rawState.claims.rewardClaims : {},
+        tierClaims: rawState.claims?.tierClaims && typeof rawState.claims.tierClaims === "object" ? rawState.claims.tierClaims : {},
+        chestClaims: rawState.claims?.chestClaims && typeof rawState.claims.chestClaims === "object" ? rawState.claims.chestClaims : {},
+      },
+      logs: {
+        eventLog: sanitizeEventLog(rawState.logs?.eventLog),
+      },
+      debug: {
+        useDebugDate: rawState.debug?.useDebugDate === true,
+        debugDate: typeof rawState.debug?.debugDate === "string" ? rawState.debug.debugDate : null,
+      },
+    };
+
+    next.completedQuestIds = next.quests.completedQuestIds;
+    next.xp = next.currencies.xp;
+    next.gold = next.currencies.gold;
+    next.totalXp = next.currencies.totalXp;
+    next.level = next.progress.level;
+    return next;
+  }
+
+  function toPersistedGameState(gameState) {
+    const normalized = normalizeGameState(gameState);
+    normalized.v = 1;
+    normalized.currencies.xp = Math.max(0, Number(normalized.xp) || 0);
+    normalized.currencies.gold = Math.max(0, Number(normalized.gold) || 0);
+    normalized.currencies.totalXp = Math.max(0, Number(normalized.totalXp) || 0);
+    normalized.progress.level = Math.max(1, Number(normalized.level) || 1);
+    normalized.quests.completedQuestIds = Array.isArray(normalized.completedQuestIds) ? normalized.completedQuestIds.filter((id) => typeof id === "string") : [];
+    normalized.completedQuestIds = normalized.quests.completedQuestIds;
+    normalized.logs.eventLog = sanitizeEventLog(normalized.logs.eventLog);
+    return normalized;
+  }
 
   const storage = {
     keys: {
-      state: "habithub-state-v2",
-      legacyState: "habithub-state-v1",
+      save: "habitrpg.save",
+      legacyState: "habithub-state-v2",
+      oldLegacyState: "habithub-state-v1",
       custom: "habithub-quests-custom-v1",
       hidden: "habithub-quests-hidden-v1",
       overrides: "habithub-quests-overrides-v1",
@@ -23,26 +115,37 @@
     saveJson(key, value) {
       localStorage.setItem(key, JSON.stringify(value));
     },
-    loadState() {
-      const raw = localStorage.getItem(this.keys.state) ?? localStorage.getItem(this.keys.legacyState);
-      if (!raw) return { ...INITIAL_STATE, completedQuestIds: [] };
-      try {
-        const parsed = JSON.parse(raw);
-        const totalXp = Math.max(0, Number(parsed.totalXp ?? parsed.xp) || 0);
-        const levelData = computeLevelProgress(totalXp);
-        return {
-          xp: Math.max(0, Number(parsed.xp) || 0),
-          totalXp,
-          gold: Math.max(0, Number(parsed.gold) || 0),
-          level: Math.max(levelData.level, Number(parsed.level) || 1),
-          completedQuestIds: Array.isArray(parsed.completedQuestIds) ? parsed.completedQuestIds.filter((id) => typeof id === "string") : [],
-        };
-      } catch {
-        return { ...INITIAL_STATE, completedQuestIds: [] };
-      }
+    migrateState(oldState) {
+      return normalizeGameState(oldState);
     },
-    saveState(state) {
-      this.saveJson(this.keys.state, state);
+    loadState() {
+      const save = this.loadJson(this.keys.save, null);
+      if (save && typeof save === "object" && typeof save.schemaVersion === "number") {
+        const migrated = this.migrateState(save.state);
+        if (save.schemaVersion !== migrated.v) {
+          return this.migrateState(migrated);
+        }
+        return migrated;
+      }
+
+      const legacy = this.loadJson(this.keys.legacyState, null) ?? this.loadJson(this.keys.oldLegacyState, null);
+      if (legacy && typeof legacy === "object") {
+        return this.migrateState(legacy);
+      }
+      return createInitialGameState();
+    },
+    saveState(gameState) {
+      const next = toPersistedGameState(gameState);
+      this.saveJson(this.keys.save, {
+        schemaVersion: next.v,
+        updatedAt: new Date().toISOString(),
+        state: next,
+      });
+    },
+    resetProgress(gameState) {
+      const reset = createInitialGameState();
+      reset.debug = cloneJson(gameState.debug || reset.debug);
+      return reset;
     },
     loadCustomQuests() {
       const list = this.loadJson(this.keys.custom, []);
@@ -141,6 +244,12 @@
         levelBar: document.getElementById("level-progress-bar"),
         levelTrack: document.getElementById("level-progress-track"),
         levelRemain: document.getElementById("level-progress-remaining"),
+        dailyTierStatus: document.getElementById("daily-tier-status"),
+        dailyTierRule: document.getElementById("daily-tier-rule"),
+        debugDateToggle: document.getElementById("debug-date-toggle"),
+        debugDateState: document.getElementById("debug-date-state"),
+        debugDateInput: document.getElementById("debug-date-input"),
+        activeDateLabel: document.getElementById("active-date-label"),
         resetBtn: document.getElementById("reset-btn"),
         catalogSearch: document.getElementById("catalog-search-input"),
         filterSelect: document.getElementById("catalog-filter-select"),
@@ -257,6 +366,48 @@
     return { level, xpIntoLevel: remaining, xpNeeded, xpRemaining: Math.max(0, xpNeeded - remaining), ratio: xpNeeded ? remaining / xpNeeded : 0 };
   }
 
+  function getActiveDateIso() {
+    if (state.game.debug.useDebugDate && state.game.debug.debugDate) {
+      return state.game.debug.debugDate;
+    }
+    return toIsoDate(new Date());
+  }
+
+  function getDailyTierFromCompleted(completedCount) {
+    const tiers = PROGRESSION_CONFIG.dailyTiers;
+    if (completedCount >= tiers.gold.minObjectives) return "gold";
+    if (completedCount >= tiers.silver.minObjectives) return "silver";
+    if (completedCount >= tiers.bronze.minObjectives) return "bronze";
+    return "none";
+  }
+
+  function getTierLabel(tier) {
+    return { bronze: "Bronze", silver: "Argent", gold: "Or", none: "Aucun" }[tier] || "Aucun";
+  }
+
+  function getTierRank(tier) {
+    return { none: 0, bronze: 1, silver: 2, gold: 3 }[tier] || 0;
+  }
+
+  function logEvent(type, payload) {
+    state.game.logs.eventLog.push({ type, payload, at: new Date().toISOString() });
+    if (state.game.logs.eventLog.length > 200) {
+      state.game.logs.eventLog = state.game.logs.eventLog.slice(-200);
+    }
+  }
+
+  function handleDayChange() {
+    const activeDate = getActiveDateIso();
+    if (state.game.progress.lastActiveDate === activeDate) return;
+    if (state.game.progress.lastActiveDate) {
+      state.game.completedQuestIds = [];
+      state.game.quests.completedQuestIds = state.game.completedQuestIds;
+      ui.showToast(`Nouveau jour détecté (${activeDate})`);
+    }
+    state.game.progress.lastActiveDate = activeDate;
+    storage.saveState(state.game);
+  }
+
   function persistCatalog() {
     storage.saveCustomQuests(state.customQuests);
     storage.saveHiddenIds(state.hiddenQuestIds);
@@ -266,6 +417,7 @@
   function cleanupCompletedIds() {
     const validIds = new Set(catalog.getAllQuestsMerged().map((quest) => quest.id));
     state.game.completedQuestIds = state.game.completedQuestIds.filter((id) => validIds.has(id));
+    state.game.quests.completedQuestIds = state.game.completedQuestIds;
   }
 
   function getQuestById(id) {
@@ -285,6 +437,10 @@
       haptics.levelUp();
     }
     state.game.level = progress.level;
+    state.game.currencies.xp = state.game.xp;
+    state.game.currencies.totalXp = state.game.totalXp;
+    state.game.currencies.gold = state.game.gold;
+    state.game.progress.level = state.game.level;
   }
 
   function rollbackCompletedQuest(quest) {
@@ -295,17 +451,32 @@
   function toggleQuestCompletion(questId) {
     const quest = getQuestById(questId);
     if (!quest || quest.isHidden) return;
+    handleDayChange();
     const completed = state.game.completedQuestIds.includes(questId);
+    const actionId = `${questId}:${getActiveDateIso()}`;
     if (completed) {
       rollbackCompletedQuest(quest);
+      delete state.game.claims.rewardClaims[actionId];
       ui.showToast(`-${quest.xp} XP • -${quest.gold} Gold`);
       haptics.tap();
+      logEvent("quest_uncompleted", { questId, activeDate: getActiveDateIso() });
     } else {
       state.game.completedQuestIds.push(questId);
+      state.game.quests.completedQuestIds = state.game.completedQuestIds;
+      state.game.claims.rewardClaims[actionId] = true;
       applyDelta(quest.xp, quest.gold);
       ui.showToast(`+${quest.xp} XP • +${quest.gold} Gold`);
       haptics.success();
+      logEvent("quest_completed", { questId, activeDate: getActiveDateIso() });
     }
+
+    const completedCount = state.game.completedQuestIds.length;
+    const tier = getDailyTierFromCompleted(completedCount);
+    state.game.progress.lastTier = tier;
+    if (getTierRank(tier) >= getTierRank(PROGRESSION_CONFIG.streakRules.minTierForStreak)) {
+      state.game.progress.streak += 1;
+    }
+
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
@@ -372,6 +543,12 @@
     ui.refs.sessionBar.style.width = `${Math.round(ratio * 100)}%`;
     ui.refs.sessionTrack.setAttribute("aria-valuenow", String(completedVisible));
     ui.refs.sessionTrack.setAttribute("aria-valuemax", String(visibleQuests.length));
+
+    const dailyTier = getDailyTierFromCompleted(completedVisible);
+    ui.refs.dailyTierStatus.textContent = `${getTierLabel(dailyTier)} • ${completedVisible} objectif(s)`;
+    ui.refs.dailyTierRule.textContent = `Argent dès ${PROGRESSION_CONFIG.dailyTiers.silver.minObjectives} objectifs • Or dès ${PROGRESSION_CONFIG.dailyTiers.gold.minObjectives} objectifs`;
+    ui.refs.debugDateState.textContent = state.game.debug.useDebugDate ? "ON" : "OFF";
+    ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
 
     renderStats();
   }
@@ -551,7 +728,8 @@
 
   function resetProgressOnly() {
     if (!window.confirm("Restart : réinitialiser XP/Gold/Niveau/progression ?")) return;
-    state.game = { ...INITIAL_STATE, completedQuestIds: [] };
+    state.game = storage.resetProgress(state.game);
+    handleDayChange();
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
@@ -621,6 +799,27 @@
       ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
       storage.saveSettings(state.settings);
       if (state.settings.hapticsEnabled) haptics.tap();
+    });
+
+    ui.refs.debugDateToggle.addEventListener("change", () => {
+      state.game.debug.useDebugDate = ui.refs.debugDateToggle.checked;
+      if (!state.game.debug.useDebugDate) state.game.debug.debugDate = null;
+      ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
+      if (state.game.debug.useDebugDate && !state.game.debug.debugDate) {
+        state.game.debug.debugDate = toIsoDate(new Date());
+      }
+      ui.refs.debugDateInput.value = state.game.debug.debugDate || "";
+      handleDayChange();
+      storage.saveState(state.game);
+      renderTodayTab();
+    });
+
+    ui.refs.debugDateInput.addEventListener("change", () => {
+      if (!ui.refs.debugDateInput.value) return;
+      state.game.debug.debugDate = ui.refs.debugDateInput.value;
+      handleDayChange();
+      storage.saveState(state.game);
+      renderTodayTab();
     });
 
     ui.refs.catalogList.addEventListener("click", (event) => {
@@ -705,7 +904,11 @@
     ui.refs.sortSelect.value = ui.createSort;
     ui.refs.hapticsToggle.checked = state.settings.hapticsEnabled;
     ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
+    ui.refs.debugDateToggle.checked = state.game.debug.useDebugDate;
+    ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
+    ui.refs.debugDateInput.value = state.game.debug.debugDate || "";
     cleanupCompletedIds();
+    handleDayChange();
     attachEvents();
     storage.saveState(state.game);
     renderTodayTab();

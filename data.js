@@ -1,5 +1,63 @@
 window.HRPG = window.HRPG || {};
 
+const PROGRESSION_CONFIG = {
+  dailyTiers: {
+    bronze: { minObjectives: 1, bonusGold: 5, bonusXp: 10 },
+    silver: { minObjectives: 3, bonusGold: 12, bonusXp: 20 },
+    gold: { minObjectives: 5, bonusGold: 24, bonusXp: 35 },
+  },
+  streakRules: {
+    minTierForStreak: "silver",
+    shieldMonthlyRefill: 1,
+    restDayRules: { enabled: true, maxPerWeek: 1 },
+    vacationRules: { enabled: true, maxDaysPerYear: 14 },
+  },
+  weeklyRules: {
+    weeklyScoreFormula: "sumDailyTierPoints",
+    chestTiers: [
+      { id: "wood", minScore: 8, bonusGold: 20, bonusXp: 30 },
+      { id: "iron", minScore: 14, bonusGold: 50, bonusXp: 65 },
+      { id: "crystal", minScore: 20, bonusGold: 90, bonusXp: 110 },
+    ],
+    bossRules: { enabled: false, bossDamageFromTier: true },
+  },
+  monthlyRules: {
+    monthlyPoints: { bronze: 1, silver: 2, gold: 3 },
+    badgeThresholds: [
+      { id: "consistant", minPoints: 35 },
+      { id: "heroic", minPoints: 55 },
+    ],
+    cosmetics: ["banner_bronze", "banner_silver", "banner_gold"],
+  },
+  yearlyRules: {
+    relics: ["relic_focus", "relic_balance"],
+    milestoneRewards: [
+      { id: "y25", minPoints: 250, tokens: 10 },
+      { id: "y50", minPoints: 500, tokens: 25 },
+    ],
+  },
+  antiExploit: {
+    caps: { maxDailyClaims: 24, maxRewardPerAction: 1 },
+    claimRules: { uniqueByActionAndDate: true, rejectFutureDate: true },
+  },
+};
+
+const INITIAL_GAME_STATE = {
+  v: 1,
+  currencies: { xp: 0, gold: 0, totalXp: 0, tokens: 0 },
+  progress: {
+    level: 1,
+    streak: 0,
+    lastActiveDate: null,
+    lastTier: "none",
+    streakShield: 0,
+  },
+  quests: { completedQuestIds: [] },
+  claims: { rewardClaims: {}, tierClaims: {}, chestClaims: {} },
+  logs: { eventLog: [] },
+  debug: { useDebugDate: false, debugDate: null },
+};
+
 HRPG.CONFIG = {
   BASE_QUESTS: [
     { id: "water", title: "Boire 1L d'eau", xp: 10, gold: 5, icon: "water", createdAt: 1 },
@@ -49,6 +107,8 @@ HRPG.CONFIG = {
     { key: "brain", label: "Deep work", svg: '<svg viewBox="0 0 24 24"><path d="M8 6a3 3 0 0 1 5-2 3.2 3.2 0 0 1 5 2.5 2.8 2.8 0 0 1 2 2.7 2.8 2.8 0 0 1-1 2.2 2.6 2.6 0 0 1 .8 1.9A3.2 3.2 0 0 1 16.6 17H7.8A3.8 3.8 0 0 1 4 13.2 3 3 0 0 1 5 11 3.2 3.2 0 0 1 8 6z"/></svg>' },
     { key: "star", label: "Favori", svg: '<svg viewBox="0 0 24 24"><path d="M12 2 9.3 8.2 2.5 9l5 4.5L6.3 21 12 17.7 17.7 21l-1.2-7.5 5-4.5-6.8-.8z"/></svg>' },
   ],
+  progressionConfig: PROGRESSION_CONFIG,
+  initialGameState: INITIAL_GAME_STATE,
   initialState: { xp: 0, totalXp: 0, level: 1, gold: 0, completedQuestIds: [] },
   progression: { BASE_XP: 50, GROWTH: 1.25, LEVEL_UP_GOLD_BASE_BONUS: 10, LEVEL_UP_GOLD_PER_LEVEL: 2 },
   ui: { countUpDurationMs: 320, toastDurationMs: 1800, questPopDurationMs: 320, questGlowDurationMs: 540, questToggleCooldownMs: 260 },
