@@ -20,68 +20,124 @@
         </div>
       </header>
 
-      <div class="layout-grid">
-        <section class="stats" aria-labelledby="stats-title">
-          <div class="stats-head">
-            <h2 id="stats-title">Progression</h2>
-            <button id="reset-btn" class="btn btn-danger" type="button">Restart</button>
-          </div>
+      <nav class="tabs" aria-label="Navigation principale">
+        <button type="button" class="tab-btn is-active" data-tab-target="today" aria-controls="tab-today">Aujourd'hui</button>
+        <button type="button" class="tab-btn" data-tab-target="create" aria-controls="tab-create">Créer</button>
+      </nav>
 
-          <div class="stats-grid">
-            <article class="stat-card" aria-label="Points d'expérience">
-              <div class="stat-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img" focusable="false">
-                  <path d="M12 2 9.2 8.1 2.6 9l4.9 4.6-1.2 6.4L12 16.8 17.7 20l-1.2-6.4L21.4 9l-6.6-.9z" />
-                </svg>
-              </div>
-              <div>
-                <p class="label">XP</p>
-                <strong id="xp-value" class="counter">0</strong>
-              </div>
-            </article>
-
-            <article class="stat-card" aria-label="Pièces d'or">
-              <div class="stat-icon gold" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img" focusable="false">
-                  <circle cx="12" cy="12" r="8" />
-                  <path d="M9.2 10.1c0-1.1.9-1.9 2.6-1.9 1.4 0 2.5.5 3.2 1.1l-1 1.6c-.6-.5-1.3-.8-2.1-.8-.7 0-1.1.2-1.1.6 0 .4.5.6 1.9 1 1.8.5 2.8 1.1 2.8 2.7 0 1.8-1.4 2.8-3.4 2.8-1.6 0-3-.5-3.9-1.4l1.1-1.5c.7.6 1.6 1.1 2.7 1.1.8 0 1.2-.2 1.2-.7 0-.4-.5-.6-1.8-1-1.9-.5-3-1.2-3-2.6z" />
-                </svg>
-              </div>
-              <div>
-                <p class="label">Gold</p>
-                <strong id="gold-value" class="counter">0</strong>
-              </div>
-            </article>
-          </div>
-
-          <div class="session-progress" aria-live="polite">
-            <div class="progress-label-row">
-              <p class="label">Quêtes du jour</p>
-              <strong id="session-progress-text">0 / 0</strong>
+      <section id="tab-today" data-tab-panel="today">
+        <div class="layout-grid">
+          <section class="stats" aria-labelledby="stats-title">
+            <div class="stats-head">
+              <h2 id="stats-title">Progression</h2>
+              <button id="reset-btn" class="btn btn-danger" type="button">Restart</button>
             </div>
-            <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-              <div id="session-progress-bar" class="progress-fill"></div>
-            </div>
-          </div>
 
-          <div class="level-progress" aria-live="polite">
-            <div class="progress-label-row">
-              <p class="label">Niveau suivant</p>
-              <strong id="level-progress-text">XP: 0 / 0</strong>
-            </div>
-            <div class="progress-track" id="level-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-              <div id="level-progress-bar" class="progress-fill level-progress-fill"></div>
-            </div>
-            <p id="level-progress-remaining" class="progress-subtext">Reste: 0 XP</p>
-          </div>
+            <div class="stats-grid">
+              <article class="stat-card" aria-label="Points d'expérience">
+                <div class="stat-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="img" focusable="false">
+                    <path d="M12 2 9.2 8.1 2.6 9l4.9 4.6-1.2 6.4L12 16.8 17.7 20l-1.2-6.4L21.4 9l-6.6-.9z" />
+                  </svg>
+                </div>
+                <div>
+                  <p class="label">XP</p>
+                  <strong id="xp-value" class="counter">0</strong>
+                </div>
+              </article>
 
-        </section>
+              <article class="stat-card" aria-label="Pièces d'or">
+                <div class="stat-icon gold" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" role="img" focusable="false">
+                    <circle cx="12" cy="12" r="8" />
+                    <path d="M9.2 10.1c0-1.1.9-1.9 2.6-1.9 1.4 0 2.5.5 3.2 1.1l-1 1.6c-.6-.5-1.3-.8-2.1-.8-.7 0-1.1.2-1.1.6 0 .4.5.6 1.9 1 1.8.5 2.8 1.1 2.8 2.7 0 1.8-1.4 2.8-3.4 2.8-1.6 0-3-.5-3.9-1.4l1.1-1.5c.7.6 1.6 1.1 2.7 1.1.8 0 1.2-.2 1.2-.7 0-.4-.5-.6-1.8-1-1.9-.5-3-1.2-3-2.6z" />
+                  </svg>
+                </div>
+                <div>
+                  <p class="label">Gold</p>
+                  <strong id="gold-value" class="counter">0</strong>
+                </div>
+              </article>
+            </div>
 
-        <section class="quests-section" aria-labelledby="quests-title">
-          <h2 id="quests-title">Quêtes du jour</h2>
-          <ul id="quests-list" class="quests-list"></ul>
-        </section>
-      </div>
+            <div class="session-progress" aria-live="polite">
+              <div class="progress-label-row">
+                <p class="label">Quêtes du jour</p>
+                <strong id="session-progress-text">0 / 0</strong>
+              </div>
+              <div class="progress-track" id="session-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+                <div id="session-progress-bar" class="progress-fill"></div>
+              </div>
+            </div>
+
+            <div class="level-progress" aria-live="polite">
+              <div class="progress-label-row">
+                <p class="label">Niveau suivant</p>
+                <strong id="level-progress-text">XP: 0 / 0</strong>
+              </div>
+              <div class="progress-track" id="level-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+                <div id="level-progress-bar" class="progress-fill level-progress-fill"></div>
+              </div>
+              <p id="level-progress-remaining" class="progress-subtext">Reste: 0 XP</p>
+            </div>
+          </section>
+
+          <section class="quests-section" aria-labelledby="quests-title">
+            <h2 id="quests-title">Quêtes du jour</h2>
+            <ul id="quests-list" class="quests-list"></ul>
+          </section>
+        </div>
+      </section>
+
+      <section id="tab-create" data-tab-panel="create" hidden>
+        <div class="create-layout">
+          <section class="manage-panel" aria-labelledby="create-title">
+            <h2 id="create-title">Ajouter une habitude</h2>
+            <p class="create-tip">Prochain objectif : créer 1 habitude qui te change la vie.</p>
+            <form id="quest-form" class="quest-form" novalidate>
+              <label class="form-field" for="quest-title-input">
+                Nom
+                <input id="quest-title-input" name="title" type="text" minlength="2" maxlength="40" placeholder="Ex: Pompes 20" required />
+              </label>
+              <p id="title-error" class="form-error" aria-live="polite"></p>
+
+              <div class="form-grid">
+                <label class="form-field" for="quest-xp-input">
+                  XP
+                  <input id="quest-xp-input" name="xp" type="number" min="1" max="200" value="10" required />
+                </label>
+
+                <label class="form-field" for="quest-gold-input">
+                  Gold
+                  <input id="quest-gold-input" name="gold" type="number" min="0" max="200" value="5" required />
+                </label>
+              </div>
+
+              <p id="numbers-error" class="form-error" aria-live="polite"></p>
+
+              <label class="form-field" for="quest-icon-select">
+                Icône
+                <select id="quest-icon-select" name="icon"></select>
+              </label>
+
+              <p id="edit-warning" class="form-warning" aria-live="polite"></p>
+
+              <div class="form-actions">
+                <button id="quest-submit-btn" class="btn btn-primary" type="submit">Ajouter</button>
+                <button id="quest-cancel-edit-btn" class="btn" type="button" hidden>Annuler édition</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="manage-panel" aria-labelledby="custom-list-title">
+            <div class="create-head">
+              <h2 id="custom-list-title">Mes habitudes</h2>
+              <p id="created-count" class="label">Habitudes créées : 0</p>
+            </div>
+            <ul id="custom-quests-list" class="quests-list"></ul>
+          </section>
+        </div>
+      </section>
     </main>
 
     <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
@@ -95,7 +151,6 @@
         <button id="level-up-continue-btn" class="btn btn-primary" type="button" data-action="close-levelup">Continuer</button>
       </div>
     </div>
-
 
     <script src="data.js"></script>
     <script src="game.js"></script>

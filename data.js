@@ -1,8 +1,10 @@
-const QUESTS = [
-  { id: "water", name: "Boire 1L d'eau", xp: 10, gold: 5 },
-  { id: "walk", name: "Marcher 20 minutes", xp: 20, gold: 10 },
-  { id: "read", name: "Lire 15 minutes", xp: 15, gold: 8 },
+const BASE_QUESTS = [
+  { id: "water", title: "Boire 1L d'eau", xp: 10, gold: 5, icon: "water", createdAt: 1 },
+  { id: "walk", title: "Marcher 20 minutes", xp: 20, gold: 10, icon: "walk", createdAt: 2 },
+  { id: "read", title: "Lire 15 minutes", xp: 15, gold: 8, icon: "book", createdAt: 3 },
 ];
+
+const ICON_OPTIONS = ["water", "walk", "book", "gym", "meditation", "cleanup", "work", "music"];
 
 const INITIAL_STATE = {
   xp: 0,
