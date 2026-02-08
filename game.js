@@ -247,10 +247,15 @@
     },
     loadSettings() {
       const settings = this.loadJson(this.keys.settings, {});
-      if (!settings || typeof settings !== "object") return { hapticsEnabled: true, developerModeEnabled: false };
+      if (!settings || typeof settings !== "object") {
+        return { hapticsEnabled: true, developerModeEnabled: false, reduceMotion: false, soundsEnabled: false, soundsVolume: 70 };
+      }
       return {
         hapticsEnabled: settings.hapticsEnabled !== false,
         developerModeEnabled: settings.developerModeEnabled === true,
+        reduceMotion: settings.reduceMotion === true,
+        soundsEnabled: settings.soundsEnabled === true,
+        soundsVolume: clamp(Math.round(Number(settings.soundsVolume) || 70), 0, 100),
       };
     },
     saveSettings(settings) {
@@ -307,7 +312,7 @@
     createSearch: "",
     iconSearch: "",
     selectedIds: new Set(),
-    todayAdvancedExpanded: false,
+    lastCompletedQuestId: null,
     editor: { open: false, mode: "create", questId: null, icon: ICON_CATALOG[0].key },
     bindRefs() {
       this.refs = {
@@ -332,9 +337,6 @@
         weeklyBossStatus: document.getElementById("weekly-boss-status"),
         monthlyYearlyStatus: document.getElementById("monthly-yearly-status"),
         claimWeeklyChestBtn: document.getElementById("claim-weekly-chest-btn"),
-        advancedProgressToggle: document.getElementById("advanced-progress-toggle"),
-        advancedProgressToggleLabel: document.getElementById("advanced-progress-toggle-label"),
-        advancedProgressPanel: document.getElementById("advanced-progress-panel"),
         vacationToggle: document.getElementById("vacation-toggle"),
         vacationState: document.getElementById("vacation-state"),
         debugDateToggle: document.getElementById("debug-date-toggle"),
@@ -353,6 +355,13 @@
         filterPill: document.getElementById("catalog-filter-pill"),
         hapticsToggle: document.getElementById("haptics-toggle"),
         hapticsToggleState: document.getElementById("haptics-toggle-state"),
+        reduceMotionToggle: document.getElementById("reduce-motion-toggle"),
+        reduceMotionState: document.getElementById("reduce-motion-state"),
+        soundsToggle: document.getElementById("sounds-toggle"),
+        soundsToggleState: document.getElementById("sounds-toggle-state"),
+        soundsVolumeRange: document.getElementById("sounds-volume-range"),
+        soundsVolumeValue: document.getElementById("sounds-volume-value"),
+        soundsVolumeRow: document.getElementById("sounds-volume-row"),
         catalogList: document.getElementById("catalog-list"),
         bulkHideBtn: document.getElementById("bulk-hide-btn"),
         catalogResetBtn: document.getElementById("catalog-reset-btn"),
@@ -376,15 +385,55 @@
         levelUpCloseBtn: document.getElementById("level-up-close-btn"),
       };
     },
-    showToast(message) {
-      const toast = document.createElement("div");
-      toast.className = "toast toast-enter";
-      toast.textContent = message;
-      this.refs.toastRoot.append(toast);
-      setTimeout(() => {
+    showToast(typeOrMessage, titleOrOptions, maybeMessage, maybeOptions) {
+      const knownTypes = new Set(["success", "info", "warn", "error"]);
+      const toastType = knownTypes.has(typeOrMessage) ? typeOrMessage : "info";
+      const title = knownTypes.has(typeOrMessage) ? String(titleOrOptions || "") : String(typeOrMessage || "");
+      const message = knownTypes.has(typeOrMessage) ? (typeof maybeMessage === "string" ? maybeMessage : "") : (typeof titleOrOptions === "string" ? titleOrOptions : "");
+      const options = knownTypes.has(typeOrMessage) ? (maybeOptions && typeof maybeOptions === "object" ? maybeOptions : {}) : (maybeMessage && typeof maybeMessage === "object" ? maybeMessage : {});
+      const duration = Math.max(1200, Number(options.durationMs) || UI_CONFIG.toastDurationMs);
+      const maxToasts = Math.max(2, Number(UI_CONFIG.toastMaxStack) || 4);
+
+      if (!title && !message) return;
+
+      const toast = document.createElement("article");
+      toast.className = `toast toast-${toastType} toast-enter`;
+      toast.setAttribute("role", toastType === "error" ? "alert" : "status");
+      toast.setAttribute("aria-live", toastType === "error" ? "assertive" : "polite");
+
+      const iconMap = {
+        success: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.2 16.2 4.8 11.8l1.4-1.4 3 3 8.6-8.6 1.4 1.4z"/></svg>',
+        info: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M11 10h2v7h-2zm0-3h2v2h-2z"/></svg>',
+        warn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20z"/><path d="M11 9h2v6h-2zm0 7h2v2h-2z"/></svg>',
+        error: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.7 8.7 6.6 6.6m0-6.6-6.6 6.6" stroke="currentColor" stroke-width="2" fill="none"/></svg>',
+      };
+
+      toast.innerHTML = `
+        <div class="toast-icon">${iconMap[toastType] || iconMap.info}</div>
+        <div class="toast-copy">
+          <strong class="toast-title">${title}</strong>
+          ${message ? `<p class="toast-message">${message}</p>` : ""}
+        </div>
+        <button type="button" class="toast-close" aria-label="Fermer la notification">✕</button>
+      `;
+
+      const closeToast = () => {
+        if (toast.dataset.closing === "1") return;
+        toast.dataset.closing = "1";
+        toast.classList.remove("toast-enter");
         toast.classList.add("toast-exit");
-        setTimeout(() => toast.remove(), 180);
-      }, UI_CONFIG.toastDurationMs);
+        setTimeout(() => toast.remove(), 220);
+      };
+
+      toast.querySelector(".toast-close")?.addEventListener("click", closeToast);
+      this.refs.toastRoot.prepend(toast);
+
+      const toasts = Array.from(this.refs.toastRoot.querySelectorAll(".toast"));
+      if (toasts.length > maxToasts) {
+        toasts.slice(maxToasts).forEach((item) => item.remove());
+      }
+
+      setTimeout(closeToast, duration);
     },
     closeLevelUpOverlay() {
       this.refs.levelUpOverlay.hidden = true;
@@ -401,6 +450,12 @@
     },
   };
 
+
+
+  function applyMotionPreferences() {
+    document.body.classList.toggle("reduce-motion", state.settings.reduceMotion);
+  }
+
   let state = {
     game: storage.loadState(),
     customQuests: storage.loadCustomQuests(),
@@ -416,19 +471,69 @@
     tap() {
       this.play(10);
     },
-    success() {
-      this.play([10, 20, 10]);
+    complete() {
+      this.play([12, 18, 10]);
     },
-    warning() {
-      this.play([30]);
+    undo() {
+      this.play([16]);
+    },
+    error() {
+      this.play([34, 18, 34]);
     },
     levelUp() {
-      this.play([12, 24, 12, 20]);
+      this.play([12, 26, 12, 38]);
     },
     play(pattern) {
       if (!state.settings.hapticsEnabled) return;
       if (!navigator || typeof navigator.vibrate !== "function") return;
       navigator.vibrate(pattern);
+    },
+  };
+
+  const audioFx = {
+    ctx: null,
+    unlocked: false,
+    ensureContext() {
+      if (!window.AudioContext && !window.webkitAudioContext) return null;
+      if (!this.ctx) {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new Ctx();
+      }
+      return this.ctx;
+    },
+    unlock() {
+      const ctx = this.ensureContext();
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume().catch(() => {});
+      this.unlocked = true;
+    },
+    gainValue() {
+      return clamp((Number(state.settings.soundsVolume) || 0) / 100, 0, 1);
+    },
+    play(kind) {
+      if (!state.settings.soundsEnabled) return;
+      const ctx = this.ensureContext();
+      if (!ctx || !this.unlocked) return;
+      const now = ctx.currentTime;
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      const master = this.gainValue();
+      const profiles = {
+        pop: { f1: 760, f2: 510, d: 0.09, v: 0.23, type: "sine" },
+        coin: { f1: 930, f2: 1180, d: 0.11, v: 0.22, type: "triangle" },
+        levelup: { f1: 520, f2: 980, d: 0.2, v: 0.26, type: "sine" },
+      };
+      const p = profiles[kind] || profiles.pop;
+      const osc = ctx.createOscillator();
+      osc.type = p.type;
+      osc.frequency.setValueAtTime(p.f1, now);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(80, p.f2), now + p.d);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, p.v * master), now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + p.d);
+      osc.connect(gain);
+      osc.start(now);
+      osc.stop(now + p.d + 0.02);
     },
   };
 
@@ -896,6 +1001,7 @@
       ui.showToast(`Level up ! +${bonus} Gold`);
       ui.showLevelUpOverlay(nextLevel, bonus);
       haptics.levelUp();
+      audioFx.play("levelup");
     }
     state.game.level = nextLevel;
     state.game.currencies.xp = state.game.xp;
@@ -999,11 +1105,12 @@
 
     let rewardResult;
     if (completed) {
+      ui.lastCompletedQuestId = null;
       rewardResult = rollbackCompletedQuest(quest, dateKey);
       if (rewardResult.applied) {
-        ui.showToast(`${rewardResult.xpDelta} XP • ${rewardResult.goldDelta} Gold`);
+        ui.showToast("info", "Quête annulée", `${rewardResult.xpDelta} XP • ${rewardResult.goldDelta} Gold`);
       }
-      haptics.tap();
+      haptics.undo();
     } else {
       state.game.completedQuestIds.push(questId);
       state.game.quests.completedQuestIds = state.game.completedQuestIds;
@@ -1015,16 +1122,19 @@
         mode: "claim",
       });
       if (rewardResult.applied) {
+        ui.lastCompletedQuestId = questId;
         if (rewardResult.reason === "cap_reached") {
-          ui.showToast("Cap atteint : 0 gain pour aujourd'hui.");
-          haptics.warning();
+          ui.showToast("warn", "Cap atteint", "0 gain pour aujourd'hui.");
+          haptics.error();
+          audioFx.play("pop");
         } else {
-          ui.showToast(`+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
+          ui.showToast("success", "Quête validée", `+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
         }
       } else if (rewardResult.reason === "already_claimed") {
-        ui.showToast("Récompense déjà récupérée aujourd'hui.");
+        ui.showToast("info", "Déjà récupérée", "Récompense déjà récupérée aujourd'hui.");
       }
-      haptics.success();
+      haptics.complete();
+      audioFx.play("pop");
     }
 
     ensureDailyProgressState();
@@ -1077,15 +1187,18 @@
       const li = document.createElement("li");
       li.className = "quest";
       if (isCompleted) li.classList.add("is-completed");
+      if (ui.lastCompletedQuestId === quest.id && isCompleted) li.classList.add("quest-success");
       li.innerHTML = `
         <div class="quest-main">
-          <div class="quest-icon">${catalog.getIcon(quest.icon).svg}</div>
-          <div>
-            <p class="quest-title">${isCompleted ? "✅" : "🎯"} ${quest.title}</p>
+          <div class="quest-icon quest-icon-round">${catalog.getIcon(quest.icon).svg}</div>
+          <div class="quest-copy">
+            <p class="quest-title">${quest.title}</p>
+            <p class="quest-subtitle">${isCompleted ? "Quête complétée" : "Objectif quotidien"}</p>
             <div class="reward-chips"><span class="chip chip-xp">+${quest.xp} XP</span><span class="chip chip-gold">+${quest.gold} Gold</span></div>
           </div>
         </div>
-        <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>`;
+        <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>
+        <span class="quest-spark" aria-hidden="true"></span>`;
       ui.refs.questsList.append(li);
     });
 
@@ -1109,11 +1222,8 @@
     ui.refs.monthlyYearlyStatus.textContent = `Badge: ${state.game.cycles.monthly.badgeId || "-"} • Reliques: ${state.game.cycles.yearly.relicsUnlocked.length} • Milestones: ${state.game.cycles.yearly.milestonesClaimed.length}`;
     ui.refs.claimWeeklyChestBtn.disabled = !chestTier || weekly.chestClaimed;
 
-    ui.refs.advancedProgressPanel.hidden = !ui.todayAdvancedExpanded;
-    ui.refs.advancedProgressToggle.setAttribute("aria-expanded", ui.todayAdvancedExpanded ? "true" : "false");
-    ui.refs.advancedProgressToggleLabel.textContent = ui.todayAdvancedExpanded ? "Masquer" : "Afficher";
-
     renderSettingsTab();
+    ui.lastCompletedQuestId = null;
 
     renderStats();
   }
@@ -1123,6 +1233,13 @@
   function renderSettingsTab() {
     ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
     ui.refs.hapticsToggle.checked = state.settings.hapticsEnabled;
+    ui.refs.reduceMotionState.textContent = state.settings.reduceMotion ? "ON" : "OFF";
+    ui.refs.reduceMotionToggle.checked = state.settings.reduceMotion;
+    ui.refs.soundsToggleState.textContent = state.settings.soundsEnabled ? "ON" : "OFF";
+    ui.refs.soundsToggle.checked = state.settings.soundsEnabled;
+    ui.refs.soundsVolumeRange.value = String(state.settings.soundsVolume);
+    ui.refs.soundsVolumeValue.textContent = `${state.settings.soundsVolume}%`;
+    ui.refs.soundsVolumeRow.hidden = !state.settings.soundsEnabled;
 
     ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
     ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
@@ -1259,7 +1376,8 @@
       state.customQuests.push({ id: createdId, ...payload, createdAt: Date.now() });
       persistCatalog();
       ui.showToast("Enregistré ✅");
-      haptics.success();
+      haptics.complete();
+      audioFx.play("pop");
       ui.selectedIds.clear();
       ui.selectedIds.add(createdId);
     } else {
@@ -1276,7 +1394,8 @@
       persistCatalog();
       storage.saveState(state.game);
       ui.showToast("Enregistré ✅");
-      haptics.success();
+      haptics.complete();
+      audioFx.play("pop");
     }
 
     cleanupCompletedIds();
@@ -1295,7 +1414,7 @@
       if (rollback) rollbackCompletedQuest(quest);
     }
     toggleHidden(id);
-    haptics.tap();
+    haptics.undo();
     cleanupCompletedIds();
     storage.saveState(state.game);
     renderTodayTab();
@@ -1320,8 +1439,8 @@
     renderTodayTab();
     renderCreateTab();
     renderSettingsTab();
-    ui.showToast("Habitude supprimée");
-    haptics.warning();
+    ui.showToast("warn", "Catalogue", "Habitude supprimée");
+    haptics.error();
   }
 
   function resetProgressOnly() {
@@ -1332,7 +1451,7 @@
     renderTodayTab();
     renderCreateTab();
     renderSettingsTab();
-    ui.showToast("Progression réinitialisée");
+    ui.showToast("info", "Réinitialisation", "Progression réinitialisée");
   }
 
   function resetCatalogOnly() {
@@ -1347,7 +1466,7 @@
     renderTodayTab();
     renderCreateTab();
     renderSettingsTab();
-    ui.showToast("Catalogue réinitialisé");
+    ui.showToast("info", "Réinitialisation", "Catalogue réinitialisé");
   }
 
 
@@ -1359,20 +1478,41 @@
     setTimeout(() => card.classList.remove("is-highlighted"), 700);
   }
 
+
+  function setActiveTab(tabId) {
+    ui.activeTab = tabId;
+    ui.refs.tabButtons.forEach((btn) => {
+      const isActive = btn.dataset.tabTarget === ui.activeTab;
+      btn.classList.toggle("is-active", isActive);
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+    ui.refs.tabPanels.forEach((panel) => {
+      panel.hidden = panel.dataset.tabPanel !== ui.activeTab;
+    });
+  }
+
   function attachEvents() {
+    const unlockAudioOnce = () => {
+      audioFx.unlock();
+      document.removeEventListener("pointerdown", unlockAudioOnce);
+      document.removeEventListener("keydown", unlockAudioOnce);
+    };
+    document.addEventListener("pointerdown", unlockAudioOnce, { once: true });
+    document.addEventListener("keydown", unlockAudioOnce, { once: true });
+
     ui.refs.tabButtons.forEach((button) => {
       button.addEventListener("click", () => {
-        ui.activeTab = button.dataset.tabTarget;
-        ui.refs.tabButtons.forEach((btn) => btn.classList.toggle("is-active", btn === button));
-        ui.refs.tabPanels.forEach((panel) => {
-          panel.hidden = panel.dataset.tabPanel !== ui.activeTab;
-        });
+        setActiveTab(button.dataset.tabTarget);
       });
     });
 
     ui.refs.questsList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-action='toggle-complete']");
-      if (button) toggleQuestCompletion(button.dataset.id);
+      if (!button) return;
+      button.classList.remove("btn-punch");
+      button.offsetHeight;
+      button.classList.add("btn-punch");
+      toggleQuestCompletion(button.dataset.id);
     });
 
     ui.refs.catalogSearch.addEventListener("input", () => {
@@ -1399,6 +1539,32 @@
       ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
       storage.saveSettings(state.settings);
       if (state.settings.hapticsEnabled) haptics.tap();
+    });
+
+    ui.refs.reduceMotionToggle.addEventListener("change", () => {
+      state.settings.reduceMotion = ui.refs.reduceMotionToggle.checked;
+      ui.refs.reduceMotionState.textContent = state.settings.reduceMotion ? "ON" : "OFF";
+      applyMotionPreferences();
+      storage.saveSettings(state.settings);
+      ui.showToast("info", "Animations", state.settings.reduceMotion ? "Animations réduites activées." : "Animations réduites désactivées.");
+    });
+
+    ui.refs.soundsToggle.addEventListener("change", () => {
+      state.settings.soundsEnabled = ui.refs.soundsToggle.checked;
+      ui.refs.soundsToggleState.textContent = state.settings.soundsEnabled ? "ON" : "OFF";
+      ui.refs.soundsVolumeRow.hidden = !state.settings.soundsEnabled;
+      if (state.settings.soundsEnabled) {
+        audioFx.unlock();
+        audioFx.play("pop");
+      }
+      storage.saveSettings(state.settings);
+    });
+
+    ui.refs.soundsVolumeRange.addEventListener("input", () => {
+      state.settings.soundsVolume = clamp(Math.round(Number(ui.refs.soundsVolumeRange.value) || 0), 0, 100);
+      ui.refs.soundsVolumeValue.textContent = `${state.settings.soundsVolume}%`;
+      storage.saveSettings(state.settings);
+      audioFx.play("pop");
     });
 
     ui.refs.developerModeToggle.addEventListener("change", () => {
@@ -1439,11 +1605,6 @@
       renderSettingsTab();
     });
 
-    ui.refs.advancedProgressToggle.addEventListener("click", () => {
-      ui.todayAdvancedExpanded = !ui.todayAdvancedExpanded;
-      renderTodayTab();
-    });
-
     ui.refs.vacationToggle.addEventListener("change", () => {
       const wantsVacation = ui.refs.vacationToggle.checked;
       const vacationEnabled = PROGRESSION_CONFIG.streakRules?.vacationRules?.enabled;
@@ -1455,7 +1616,7 @@
       if (wantsVacation && state.game.progress.vacationDaysRemaining < 1) {
         ui.refs.vacationToggle.checked = false;
         state.game.daily.vacationMode = false;
-        ui.showToast("Aucun jour vacances restant.");
+        ui.showToast("warn", "Vacances", "Aucun jour vacances restant.");
         return;
       }
       if (wantsVacation && !state.game.daily.vacationMode) {
@@ -1504,12 +1665,13 @@
     ui.refs.claimWeeklyChestBtn.addEventListener("click", () => {
       const result = claimWeeklyChestReward();
       if (result.ok) {
-        ui.showToast(`Coffre ${result.chestTier.id} ouvert : +${result.chestTier.bonusXp} XP • +${result.chestTier.bonusGold} Gold`);
-        haptics.success();
+        ui.showToast("success", "Coffre hebdo", `${result.chestTier.id} ouvert : +${result.chestTier.bonusXp} XP • +${result.chestTier.bonusGold} Gold`);
+        haptics.complete();
+        audioFx.play("coin");
       } else if (result.reason === "already_claimed") {
-        ui.showToast("Coffre hebdo déjà récupéré.");
+        ui.showToast("info", "Coffre hebdo", "Déjà récupéré.");
       } else {
-        ui.showToast("Score hebdo insuffisant pour le coffre.");
+        ui.showToast("warn", "Coffre hebdo", "Score insuffisant pour le coffre.");
       }
       storage.saveState(state.game);
       renderTodayTab();
@@ -1578,6 +1740,8 @@
     ui.refs.filterSelect.value = ui.createFilter;
     ui.refs.sortSelect.value = ui.createSort;
     renderSettingsTab();
+    applyMotionPreferences();
+    setActiveTab(ui.activeTab);
     cleanupCompletedIds();
     recomputeTotalXp();
     const computedLevel = computeLevelProgress(state.game.totalXp).level;
