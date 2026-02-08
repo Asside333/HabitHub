@@ -551,3 +551,128 @@ h1 {
     animation: none !important;
   }
 }
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.tab-btn {
+  border: 1px solid var(--border);
+  background: rgba(19, 40, 94, 0.65);
+  color: #e9f1ff;
+  border-radius: 14px;
+  font-weight: 800;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+}
+
+.tab-btn.is-active {
+  background: rgba(88, 204, 108, 0.22);
+  border-color: rgba(130, 233, 153, 0.65);
+}
+
+.create-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.manage-panel {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, rgba(22, 46, 106, 0.95), rgba(20, 40, 94, 0.85));
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-4);
+}
+
+.quest-form {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-field {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 700;
+  color: #dce8ff;
+}
+
+.form-field input,
+.form-field select {
+  border: 1px solid rgba(204, 220, 255, 0.34);
+  border-radius: 12px;
+  padding: 0.62rem 0.75rem;
+  font: inherit;
+  color: #f6f9ff;
+  background: rgba(13, 31, 75, 0.7);
+}
+
+.form-field input:focus-visible,
+.form-field select:focus-visible,
+.tab-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.form-error,
+.form-warning {
+  min-height: 1.1rem;
+  font-size: 0.82rem;
+  margin: 0;
+}
+
+.form-error {
+  color: #ffb5c0;
+}
+
+.form-warning {
+  color: #ffdca1;
+}
+
+.form-actions,
+.quest-actions,
+.create-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-content: space-between;
+}
+
+.create-tip {
+  margin-top: 0.4rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.btn-secondary {
+  color: #eaf2ff;
+  background: rgba(101, 138, 220, 0.55);
+  border: 1px solid rgba(196, 216, 255, 0.45);
+}
+
+@media (max-width: 860px) {
+  .create-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .quest-actions,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
