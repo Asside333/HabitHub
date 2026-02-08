@@ -35,49 +35,23 @@
 
             <div class="stats-grid">
               <article class="stat-card" aria-label="Points d'expérience">
-                <div class="stat-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" role="img" focusable="false">
-                    <path d="M12 2 9.2 8.1 2.6 9l4.9 4.6-1.2 6.4L12 16.8 17.7 20l-1.2-6.4L21.4 9l-6.6-.9z" />
-                  </svg>
-                </div>
-                <div>
-                  <p class="label">XP</p>
-                  <strong id="xp-value" class="counter">0</strong>
-                </div>
+                <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2 9.2 8.1 2.6 9l4.9 4.6-1.2 6.4L12 16.8 17.7 20l-1.2-6.4L21.4 9l-6.6-.9z" /></svg></div>
+                <div><p class="label">XP</p><strong id="xp-value" class="counter">0</strong></div>
               </article>
-
               <article class="stat-card" aria-label="Pièces d'or">
-                <div class="stat-icon gold" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" role="img" focusable="false">
-                    <circle cx="12" cy="12" r="8" />
-                    <path d="M9.2 10.1c0-1.1.9-1.9 2.6-1.9 1.4 0 2.5.5 3.2 1.1l-1 1.6c-.6-.5-1.3-.8-2.1-.8-.7 0-1.1.2-1.1.6 0 .4.5.6 1.9 1 1.8.5 2.8 1.1 2.8 2.7 0 1.8-1.4 2.8-3.4 2.8-1.6 0-3-.5-3.9-1.4l1.1-1.5c.7.6 1.6 1.1 2.7 1.1.8 0 1.2-.2 1.2-.7 0-.4-.5-.6-1.8-1-1.9-.5-3-1.2-3-2.6z" />
-                  </svg>
-                </div>
-                <div>
-                  <p class="label">Gold</p>
-                  <strong id="gold-value" class="counter">0</strong>
-                </div>
+                <div class="stat-icon gold" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M9.2 10.1c0-1.1.9-1.9 2.6-1.9 1.4 0 2.5.5 3.2 1.1l-1 1.6c-.6-.5-1.3-.8-2.1-.8-.7 0-1.1.2-1.1.6 0 .4.5.6 1.9 1 1.8.5 2.8 1.1 2.8 2.7 0 1.8-1.4 2.8-3.4 2.8-1.6 0-3-.5-3.9-1.4l1.1-1.5c.7.6 1.6 1.1 2.7 1.1.8 0 1.2-.2 1.2-.7 0-.4-.5-.6-1.8-1-1.9-.5-3-1.2-3-2.6z" /></svg></div>
+                <div><p class="label">Gold</p><strong id="gold-value" class="counter">0</strong></div>
               </article>
             </div>
 
             <div class="session-progress" aria-live="polite">
-              <div class="progress-label-row">
-                <p class="label">Quêtes du jour</p>
-                <strong id="session-progress-text">0 / 0</strong>
-              </div>
-              <div class="progress-track" id="session-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-                <div id="session-progress-bar" class="progress-fill"></div>
-              </div>
+              <div class="progress-label-row"><p class="label">Quêtes du jour</p><strong id="session-progress-text">0 / 0</strong></div>
+              <div class="progress-track" id="session-progress-track" role="progressbar"><div id="session-progress-bar" class="progress-fill"></div></div>
             </div>
 
             <div class="level-progress" aria-live="polite">
-              <div class="progress-label-row">
-                <p class="label">Niveau suivant</p>
-                <strong id="level-progress-text">XP: 0 / 0</strong>
-              </div>
-              <div class="progress-track" id="level-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-                <div id="level-progress-bar" class="progress-fill level-progress-fill"></div>
-              </div>
+              <div class="progress-label-row"><p class="label">Niveau suivant</p><strong id="level-progress-text">XP: 0 / 0</strong></div>
+              <div class="progress-track" id="level-progress-track" role="progressbar"><div id="level-progress-bar" class="progress-fill level-progress-fill"></div></div>
               <p id="level-progress-remaining" class="progress-subtext">Reste: 0 XP</p>
             </div>
           </section>
@@ -90,68 +64,48 @@
       </section>
 
       <section id="tab-create" data-tab-panel="create" hidden>
-        <div class="create-layout">
-          <section class="manage-panel" aria-labelledby="create-title">
-            <h2 id="create-title">Ajouter une habitude</h2>
-            <p class="create-tip">Prochain objectif : créer 1 habitude qui te change la vie.</p>
-            <form id="quest-form" class="quest-form" novalidate>
-              <label class="form-field" for="quest-title-input">
-                Nom
-                <input id="quest-title-input" name="title" type="text" minlength="2" maxlength="40" placeholder="Ex: Pompes 20" required />
-              </label>
-              <p id="title-error" class="form-error" aria-live="polite"></p>
-
-              <div class="form-grid">
-                <label class="form-field" for="quest-xp-input">
-                  XP
-                  <input id="quest-xp-input" name="xp" type="number" min="1" max="200" value="10" required />
-                </label>
-
-                <label class="form-field" for="quest-gold-input">
-                  Gold
-                  <input id="quest-gold-input" name="gold" type="number" min="0" max="200" value="5" required />
-                </label>
-              </div>
-
-              <p id="numbers-error" class="form-error" aria-live="polite"></p>
-
-              <label class="form-field" for="quest-icon-select">
-                Icône
-                <select id="quest-icon-select" name="icon"></select>
-              </label>
-
-              <p id="edit-warning" class="form-warning" aria-live="polite"></p>
-
-              <div class="form-actions">
-                <button id="quest-submit-btn" class="btn btn-primary" type="submit">Ajouter</button>
-                <button id="quest-cancel-edit-btn" class="btn" type="button" hidden>Annuler édition</button>
-              </div>
-            </form>
-          </section>
-
-          <section class="manage-panel" aria-labelledby="custom-list-title">
-            <div class="create-head">
-              <h2 id="custom-list-title">Mes habitudes</h2>
-              <p id="created-count" class="label">Habitudes créées : 0</p>
+        <section class="manage-panel" aria-labelledby="create-title">
+          <div class="create-toolbar">
+            <h2 id="create-title">Catalogue des habitudes</h2>
+            <div class="toolbar-row">
+              <input id="catalog-search-input" type="search" placeholder="Rechercher une habitude…" />
+              <button id="new-quest-btn" class="btn btn-primary" type="button">+ Nouvelle habitude</button>
             </div>
-            <ul id="custom-quests-list" class="quests-list"></ul>
-          </section>
-        </div>
+            <div id="catalog-filters" class="filter-row" role="tablist" aria-label="Filtres catalogue"></div>
+            <div class="toolbar-row">
+              <button id="bulk-hide-btn" class="btn" type="button">Masquer la sélection</button>
+              <button id="catalog-reset-btn" class="btn btn-danger" type="button">Réinitialiser mon catalogue</button>
+            </div>
+          </div>
+          <ul id="catalog-list" class="catalog-list"></ul>
+        </section>
       </section>
     </main>
 
-    <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
-    <div id="confetti-layer" class="confetti-layer" aria-hidden="true"></div>
-
-    <div id="level-up-overlay" class="level-up-overlay" hidden aria-hidden="true">
-      <div class="level-up-modal" role="dialog" aria-modal="true" aria-labelledby="level-up-title">
-        <p class="hero-kicker">LEVEL UP</p>
-        <h2 id="level-up-title">Niveau 2 !</h2>
-        <p id="level-up-message" class="subtitle">+12 Gold</p>
-        <button id="level-up-continue-btn" class="btn btn-primary" type="button" data-action="close-levelup">Continuer</button>
-      </div>
+    <div id="quest-editor-modal" class="editor-modal" hidden>
+      <div id="editor-backdrop" class="editor-backdrop" data-action="close-editor"></div>
+      <aside class="editor-panel" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+        <h3 id="editor-title">Nouvelle habitude</h3>
+        <form id="quest-editor-form" class="quest-form" novalidate>
+          <label class="form-field">Nom<input id="editor-title-input" type="text" minlength="2" maxlength="40" required /></label>
+          <div class="form-grid">
+            <label class="form-field">XP<input id="editor-xp-input" type="number" min="1" max="200" required /></label>
+            <label class="form-field">Gold<input id="editor-gold-input" type="number" min="0" max="200" required /></label>
+          </div>
+          <label class="form-field">Rechercher une icône<input id="icon-search-input" type="search" placeholder="Ex: eau, sport..." /></label>
+          <div id="icon-grid" class="icon-grid" role="listbox" aria-label="Choix d'icône"></div>
+          <p id="editor-error" class="form-error" aria-live="polite"></p>
+          <div class="form-actions">
+            <button id="editor-save-btn" class="btn btn-primary" type="submit">Enregistrer</button>
+            <button id="editor-cancel-btn" class="btn" type="button" data-action="close-editor">Annuler</button>
+            <button id="editor-restore-btn" class="btn" type="button" hidden>Restaurer</button>
+            <button id="editor-delete-btn" class="btn btn-danger" type="button" hidden>Supprimer</button>
+          </div>
+        </form>
+      </aside>
     </div>
 
+    <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
     <script src="data.js"></script>
     <script src="game.js"></script>
   </body>
