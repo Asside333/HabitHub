@@ -474,6 +474,40 @@
     return `${dateKey}:${actionId}`;
   }
 
+  function getDailyRewardTotals(dateKey) {
+    const safeDateKey = typeof dateKey === "string" ? dateKey : getActiveDateIso();
+    const prefix = `${safeDateKey}:`;
+    return Object.entries(state.game.claims.rewardClaims).reduce((acc, [claimKey, claim]) => {
+      if (!claimKey.startsWith(prefix)) return acc;
+      const xp = Math.max(0, Number(claim?.xp) || 0);
+      const gold = Math.max(0, Number(claim?.gold) || 0);
+      acc.xp += xp;
+      acc.gold += gold;
+      return acc;
+    }, { xp: 0, gold: 0 });
+  }
+
+  function applyDailyCaps(dateKey, xpWanted, goldWanted) {
+    const caps = PROGRESSION_CONFIG.antiExploit?.caps || {};
+    const capXpPerDay = Math.max(0, Math.floor(Number(caps.capXpPerDay) || 0));
+    const capGoldPerDay = Math.max(0, Math.floor(Number(caps.capGoldPerDay) || 0));
+    const totals = getDailyRewardTotals(dateKey);
+    const xpRemaining = Math.max(0, capXpPerDay - totals.xp);
+    const goldRemaining = Math.max(0, capGoldPerDay - totals.gold);
+    const xpGranted = Math.max(0, Math.min(xpWanted, xpRemaining));
+    const goldGranted = Math.max(0, Math.min(goldWanted, goldRemaining));
+    return {
+      xpGranted,
+      goldGranted,
+      xpRemaining,
+      goldRemaining,
+      capXpPerDay,
+      capGoldPerDay,
+      isCapReached: xpGranted === 0 && goldGranted === 0 && (xpWanted > 0 || goldWanted > 0),
+      isPartial: xpGranted < xpWanted || goldGranted < goldWanted,
+    };
+  }
+
   function logEvent(type, payload) {
     const maxEntries = Math.max(1, Number(PROGRESSION_CONFIG.antiExploit?.eventLogMaxEntries) || 200);
     state.game.logs.eventLog.push({
@@ -552,16 +586,52 @@
       if (existingClaim) {
         return { applied: false, xpDelta: 0, goldDelta: 0, reason: "already_claimed" };
       }
-      const xpGain = Math.max(0, Math.round(Number(params?.xp) || 0));
-      const goldGain = Math.max(0, Math.round(Number(params?.gold) || 0));
+
+      const xpWanted = Math.max(0, Math.round(Number(params?.xp) || 0));
+      const goldWanted = Math.max(0, Math.round(Number(params?.gold) || 0));
+      const capResult = applyDailyCaps(dateKey, xpWanted, goldWanted);
+      const xpGain = capResult.xpGranted;
+      const goldGain = capResult.goldGranted;
+
       state.game.claims.rewardClaims[claimKey] = {
         claimedAt: new Date().toISOString(),
         xp: xpGain,
         gold: goldGain,
       };
+
       applyDelta(xpGain, goldGain);
-      logEvent("CLAIM", { actionId, dateKey, xpDelta: xpGain, goldDelta: goldGain });
-      return { applied: true, xpDelta: xpGain, goldDelta: goldGain, reason: "claimed" };
+      logEvent("CLAIM", { actionId, dateKey, xpDelta: xpGain, goldDelta: goldGain, xpWanted, goldWanted });
+
+      if (capResult.isPartial) {
+        logEvent("CAP_APPLIED", {
+          actionId,
+          dateKey,
+          xpWanted,
+          goldWanted,
+          xpGranted: xpGain,
+          goldGranted: goldGain,
+          capXpPerDay: capResult.capXpPerDay,
+          capGoldPerDay: capResult.capGoldPerDay,
+        });
+      }
+
+      if (xpGain < xpWanted || goldGain < goldWanted) {
+        logEvent("CLAIM_PARTIAL", {
+          actionId,
+          dateKey,
+          xpWanted,
+          goldWanted,
+          xpGranted: xpGain,
+          goldGranted: goldGain,
+        });
+      }
+
+      return {
+        applied: true,
+        xpDelta: xpGain,
+        goldDelta: goldGain,
+        reason: capResult.isCapReached ? "cap_reached" : (capResult.isPartial ? "claim_partial" : "claimed"),
+      };
     }
 
     if (!existingClaim) {
@@ -573,6 +643,11 @@
     applyDelta(-xpRollback, -goldRollback);
     delete state.game.claims.rewardClaims[claimKey];
     logEvent("ROLLBACK", { actionId, dateKey, xpDelta: -xpRollback, goldDelta: -goldRollback });
+
+    if (xpRollback > 0 || goldRollback > 0) {
+      logEvent("ROLLBACK_PARTIAL", { actionId, dateKey, xpRolledBack: xpRollback, goldRolledBack: goldRollback });
+    }
+
     return { applied: true, xpDelta: -xpRollback, goldDelta: -goldRollback, reason: "rolled_back" };
   }
 
@@ -607,7 +682,12 @@
         mode: "claim",
       });
       if (rewardResult.applied) {
-        ui.showToast(`+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
+        if (rewardResult.reason === "cap_reached") {
+          ui.showToast("Cap atteint : 0 gain pour aujourd'hui.");
+          haptics.warning();
+        } else {
+          ui.showToast(`+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
+        }
       } else if (rewardResult.reason === "already_claimed") {
         ui.showToast("Récompense déjà récupérée aujourd'hui.");
       }
