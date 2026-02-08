@@ -54,7 +54,17 @@
               <p id="daily-tier-rule" class="progress-subtext">Argent dès 3 objectifs • Or dès 5 objectifs</p>
             </div>
 
+            <div class="session-progress" aria-live="polite">
+              <div class="progress-label-row"><p class="label">Streak saine</p><strong id="streak-status">Streak: 0 jour(s)</strong></div>
+              <p id="streak-protections" class="progress-subtext">Shield: 1/1 • Rest cette semaine: 0/1 • Vacances restantes: 14</p>
+            </div>
+
             <div class="debug-date-panel" aria-live="polite">
+              <label class="toggle-field" for="vacation-toggle">
+                <span>Mode vacances :</span>
+                <input id="vacation-toggle" type="checkbox" role="switch" />
+                <strong id="vacation-state">OFF</strong>
+              </label>
               <label class="toggle-field" for="debug-date-toggle">
                 <span>Use debug date :</span>
                 <input id="debug-date-toggle" type="checkbox" role="switch" />

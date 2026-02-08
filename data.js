@@ -51,13 +51,16 @@ const PROGRESSION_CONFIG = {
 const INITIAL_GAME_STATE = {
   v: 1,
   currencies: { xp: 0, gold: 0, totalXp: 0, tokens: 0 },
-  daily: { dateKey: null, objectivesCompleted: 0, tier: "none", tierBonusGoldApplied: 0 },
+  daily: { dateKey: null, objectivesCompleted: 0, tier: "none", tierBonusGoldApplied: 0, vacationMode: false },
   progress: {
     level: 1,
     streak: 0,
     lastActiveDate: null,
     lastTier: "none",
-    streakShield: 0,
+    streakShield: 1,
+    restDaysUsedByWeek: {},
+    vacationDaysRemaining: 14,
+    lastShieldRefillMonth: null,
   },
   quests: { completedQuestIds: [] },
   claims: { rewardClaims: {}, tierClaims: {}, chestClaims: {} },

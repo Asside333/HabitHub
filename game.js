@@ -52,6 +52,7 @@
       objectivesCompleted: Math.max(0, Math.floor(Number(raw.objectivesCompleted) || 0)),
       tier: typeof raw.tier === "string" ? raw.tier : "none",
       tierBonusGoldApplied: Math.max(0, Math.floor(Number(raw.tierBonusGoldApplied) || 0)),
+      vacationMode: raw.vacationMode === true,
     };
   }
 
@@ -83,7 +84,10 @@
         streak: Math.max(0, Number(rawState.progress?.streak) || 0),
         lastActiveDate: typeof rawState.progress?.lastActiveDate === "string" ? rawState.progress.lastActiveDate : null,
         lastTier: typeof rawState.progress?.lastTier === "string" ? rawState.progress.lastTier : "none",
-        streakShield: Math.max(0, Number(rawState.progress?.streakShield) || 0),
+        streakShield: Math.max(0, Math.min(1, Number(rawState.progress?.streakShield) || 0)),
+        restDaysUsedByWeek: rawState.progress?.restDaysUsedByWeek && typeof rawState.progress.restDaysUsedByWeek === "object" ? rawState.progress.restDaysUsedByWeek : {},
+        vacationDaysRemaining: Math.max(0, Number(rawState.progress?.vacationDaysRemaining ?? PROGRESSION_CONFIG.streakRules?.vacationRules?.maxDaysPerYear) || 0),
+        lastShieldRefillMonth: typeof rawState.progress?.lastShieldRefillMonth === "string" ? rawState.progress.lastShieldRefillMonth : null,
       },
       quests: {
         completedQuestIds,
@@ -122,6 +126,9 @@
     normalized.logs.eventLog = sanitizeEventLog(normalized.logs.eventLog);
     normalized.claims.rewardClaims = sanitizeRewardClaims(normalized.claims.rewardClaims);
     normalized.daily = sanitizeDailyState(normalized.daily);
+    normalized.progress.streakShield = Math.max(0, Math.min(1, Number(normalized.progress.streakShield) || 0));
+    normalized.progress.restDaysUsedByWeek = normalized.progress.restDaysUsedByWeek && typeof normalized.progress.restDaysUsedByWeek === "object" ? normalized.progress.restDaysUsedByWeek : {};
+    normalized.progress.vacationDaysRemaining = Math.max(0, Number(normalized.progress.vacationDaysRemaining) || 0);
     return normalized;
   }
 
@@ -279,6 +286,10 @@
         levelRemain: document.getElementById("level-progress-remaining"),
         dailyTierStatus: document.getElementById("daily-tier-status"),
         dailyTierRule: document.getElementById("daily-tier-rule"),
+        streakStatus: document.getElementById("streak-status"),
+        streakProtections: document.getElementById("streak-protections"),
+        vacationToggle: document.getElementById("vacation-toggle"),
+        vacationState: document.getElementById("vacation-state"),
         debugDateToggle: document.getElementById("debug-date-toggle"),
         debugDateState: document.getElementById("debug-date-state"),
         debugDateInput: document.getElementById("debug-date-input"),
@@ -573,10 +584,68 @@
     }
   }
 
+  function tierMeetsStreakRequirement(tier) {
+    const order = ["none", "bronze", "silver", "gold"];
+    const minTier = PROGRESSION_CONFIG.streakRules?.minTierForStreak || "silver";
+    return order.indexOf(tier) >= order.indexOf(minTier);
+  }
+
+  function getWeekKey(dateKey) {
+    const date = new Date(`${dateKey}T00:00:00`);
+    const day = (date.getDay() + 6) % 7;
+    date.setDate(date.getDate() - day);
+    return toIsoDate(date);
+  }
+
+  function refillMonthlyShieldIfNeeded(activeDate) {
+    const monthKey = activeDate.slice(0, 7);
+    if (state.game.progress.lastShieldRefillMonth === monthKey) return;
+    const refill = Math.max(0, Math.floor(Number(PROGRESSION_CONFIG.streakRules?.shieldMonthlyRefill) || 0));
+    if (refill > 0) {
+      state.game.progress.streakShield = Math.min(1, state.game.progress.streakShield + refill);
+      logEvent("STREAK_SHIELD_REFILL", { monthKey, refill, streakShield: state.game.progress.streakShield });
+    }
+    state.game.progress.lastShieldRefillMonth = monthKey;
+  }
+
+  function finalizePreviousDay(prevDate) {
+    const previousTier = state.game.daily.tier || "none";
+    if (state.game.daily.vacationMode) {
+      logEvent("STREAK_DAY_CLOSED", { prevDate, previousTier, result: "vacation_freeze", streak: state.game.progress.streak });
+      return;
+    }
+    if (tierMeetsStreakRequirement(previousTier)) {
+      state.game.progress.streak += 1;
+      logEvent("STREAK_DAY_CLOSED", { prevDate, previousTier, result: "streak_up", streak: state.game.progress.streak });
+      return;
+    }
+
+    if (state.game.progress.streakShield > 0) {
+      state.game.progress.streakShield = Math.max(0, state.game.progress.streakShield - 1);
+      logEvent("STREAK_DAY_CLOSED", { prevDate, previousTier, result: "shield_used", streak: state.game.progress.streak, streakShield: state.game.progress.streakShield });
+      return;
+    }
+
+    const restRules = PROGRESSION_CONFIG.streakRules?.restDayRules || {};
+    const restWeekKey = getWeekKey(prevDate);
+    const restUsed = Math.max(0, Number(state.game.progress.restDaysUsedByWeek[restWeekKey]) || 0);
+    const restMax = Math.max(0, Number(restRules.maxPerWeek) || 0);
+    if (restRules.enabled && restUsed < restMax) {
+      state.game.progress.restDaysUsedByWeek[restWeekKey] = restUsed + 1;
+      logEvent("STREAK_DAY_CLOSED", { prevDate, previousTier, result: "rest_day_used", streak: state.game.progress.streak, restWeekKey, restUsed: restUsed + 1, restMax });
+      return;
+    }
+
+    state.game.progress.streak = 0;
+    logEvent("STREAK_DAY_CLOSED", { prevDate, previousTier, result: "reset", streak: 0 });
+  }
+
   function handleDayChange() {
     const activeDate = getActiveDateIso();
+    refillMonthlyShieldIfNeeded(activeDate);
     if (state.game.progress.lastActiveDate === activeDate) return;
     if (state.game.progress.lastActiveDate) {
+      finalizePreviousDay(state.game.progress.lastActiveDate);
       state.game.completedQuestIds = [];
       state.game.quests.completedQuestIds = state.game.completedQuestIds;
       ui.showToast(`Nouveau jour détecté (${activeDate})`);
@@ -586,6 +655,7 @@
     state.game.daily.objectivesCompleted = 0;
     state.game.daily.tier = "none";
     state.game.daily.tierBonusGoldApplied = 0;
+    state.game.daily.vacationMode = false;
     storage.saveState(state.game);
   }
 
@@ -828,6 +898,10 @@
     const dailyState = ensureDailyProgressState();
     ui.refs.dailyTierStatus.textContent = `${getTierLabel(dailyState.tier)} • ${dailyState.objectivesCompleted} objectif(s)`;
     ui.refs.dailyTierRule.textContent = `Argent dès ${PROGRESSION_CONFIG.dailyTiers.silver.minObjectives} objectifs • Or dès ${PROGRESSION_CONFIG.dailyTiers.gold.minObjectives} objectifs`;
+    ui.refs.streakStatus.textContent = `Streak: ${state.game.progress.streak} jour(s)`;
+    ui.refs.streakProtections.textContent = `Shield: ${state.game.progress.streakShield}/1 • Rest cette semaine: ${Math.max(0, Number(state.game.progress.restDaysUsedByWeek[getWeekKey(getActiveDateIso())]) || 0)}/${Math.max(0, Number(PROGRESSION_CONFIG.streakRules?.restDayRules?.maxPerWeek) || 0)} • Vacances restantes: ${state.game.progress.vacationDaysRemaining}`;
+    ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
+    ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
     ui.refs.debugDateState.textContent = state.game.debug.useDebugDate ? "ON" : "OFF";
     ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
 
@@ -1103,6 +1177,29 @@
       renderTodayTab();
     });
 
+    ui.refs.vacationToggle.addEventListener("change", () => {
+      const wantsVacation = ui.refs.vacationToggle.checked;
+      const vacationEnabled = PROGRESSION_CONFIG.streakRules?.vacationRules?.enabled;
+      if (!vacationEnabled) {
+        ui.refs.vacationToggle.checked = false;
+        state.game.daily.vacationMode = false;
+        return;
+      }
+      if (wantsVacation && state.game.progress.vacationDaysRemaining < 1) {
+        ui.refs.vacationToggle.checked = false;
+        state.game.daily.vacationMode = false;
+        ui.showToast("Aucun jour vacances restant.");
+        return;
+      }
+      if (wantsVacation && !state.game.daily.vacationMode) {
+        state.game.progress.vacationDaysRemaining = Math.max(0, state.game.progress.vacationDaysRemaining - 1);
+        logEvent("VACATION_DAY_ARMED", { dateKey: getActiveDateIso(), vacationDaysRemaining: state.game.progress.vacationDaysRemaining });
+      }
+      state.game.daily.vacationMode = wantsVacation;
+      storage.saveState(state.game);
+      renderTodayTab();
+    });
+
     ui.refs.catalogList.addEventListener("click", (event) => {
       const action = event.target.closest("[data-action]");
       if (!action) return;
@@ -1203,6 +1300,7 @@
     ui.refs.debugDateToggle.checked = state.game.debug.useDebugDate;
     ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
     ui.refs.debugDateInput.value = state.game.debug.debugDate || "";
+    ui.refs.vacationToggle.checked = state.game.daily.vacationMode === true;
     cleanupCompletedIds();
     recomputeTotalXp();
     const computedLevel = computeLevelProgress(state.game.totalXp).level;
