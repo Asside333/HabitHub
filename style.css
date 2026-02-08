@@ -251,6 +251,53 @@ h1 {
   background: linear-gradient(90deg, #7ca6ff, #9fbeff);
 }
 
+
+.advanced-progress {
+  margin-top: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(204, 220, 255, 0.26);
+  background: rgba(17, 36, 85, 0.7);
+}
+
+.advanced-progress-toggle {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  padding: 0.75rem 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.advanced-progress-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.advanced-progress-title {
+  font-size: 0.95rem;
+}
+
+.advanced-progress-toggle-label {
+  border: 1px solid rgba(196, 216, 255, 0.45);
+  border-radius: 999px;
+  background: rgba(101, 138, 220, 0.35);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.advanced-progress-panel {
+  border-top: 1px solid rgba(204, 220, 255, 0.26);
+  padding: 0.75rem;
+}
+
 .progress-subtext {
   margin-top: 0.45rem;
   color: #d7e4ff;

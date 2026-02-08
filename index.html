@@ -59,12 +59,18 @@
               <p id="streak-protections" class="progress-subtext">Shield: 1/1 • Rest cette semaine: 0/1 • Vacances restantes: 14</p>
             </div>
 
-            <div class="session-progress" aria-live="polite">
-              <div class="progress-label-row"><p class="label">Progression hebdo/mensuelle</p><strong id="weekly-score-status">Score hebdo: 0</strong></div>
-              <p id="weekly-boss-status" class="progress-subtext">Boss: 0 / 0 • Streak boss: 0</p>
-              <p id="monthly-yearly-status" class="progress-subtext">Badge: - • Reliques: 0 • Milestones: 0</p>
-              <button id="claim-weekly-chest-btn" class="btn btn-secondary" type="button">Claim coffre hebdo</button>
-            </div>
+            <section class="advanced-progress" aria-live="polite" aria-labelledby="advanced-progress-title">
+              <button id="advanced-progress-toggle" class="advanced-progress-toggle" type="button" aria-controls="advanced-progress-panel" aria-expanded="false">
+                <span id="advanced-progress-title" class="advanced-progress-title">Progression avancée</span>
+                <span id="advanced-progress-toggle-label" class="advanced-progress-toggle-label">Afficher</span>
+              </button>
+              <div id="advanced-progress-panel" class="advanced-progress-panel" hidden>
+                <div class="progress-label-row"><p class="label">Progression hebdo/mensuelle</p><strong id="weekly-score-status">Score hebdo: 0</strong></div>
+                <p id="weekly-boss-status" class="progress-subtext">Boss: 0 / 0 • Streak boss: 0</p>
+                <p id="monthly-yearly-status" class="progress-subtext">Badge: - • Reliques: 0 • Milestones: 0</p>
+                <button id="claim-weekly-chest-btn" class="btn btn-secondary" type="button">Claim coffre hebdo</button>
+              </div>
+            </section>
 
             <div class="level-progress" aria-live="polite">
               <div class="progress-label-row"><p class="label">Niveau suivant</p><strong id="level-progress-text">XP: 0 / 0</strong></div>
@@ -164,6 +170,7 @@
               <input id="debug-date-input" type="date" />
             </label>
             <p id="active-date-label" class="progress-subtext">Date active : -</p>
+            <p id="dev-tech-info" class="progress-subtext">Clé save: habitrpg.save • Schéma: -</p>
           </article>
 
           <article class="settings-section" aria-labelledby="settings-data-title">
