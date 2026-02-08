@@ -247,8 +247,11 @@
     },
     loadSettings() {
       const settings = this.loadJson(this.keys.settings, {});
-      if (!settings || typeof settings !== "object") return { hapticsEnabled: true };
-      return { hapticsEnabled: settings.hapticsEnabled !== false };
+      if (!settings || typeof settings !== "object") return { hapticsEnabled: true, developerModeEnabled: false };
+      return {
+        hapticsEnabled: settings.hapticsEnabled !== false,
+        developerModeEnabled: settings.developerModeEnabled === true,
+      };
     },
     saveSettings(settings) {
       this.saveJson(this.keys.settings, settings);
@@ -334,6 +337,10 @@
         debugDateState: document.getElementById("debug-date-state"),
         debugDateInput: document.getElementById("debug-date-input"),
         activeDateLabel: document.getElementById("active-date-label"),
+        vacationRemainingLabel: document.getElementById("vacation-remaining-label"),
+        developerModeToggle: document.getElementById("developer-mode-toggle"),
+        developerModeState: document.getElementById("developer-mode-state"),
+        developerSettingsSection: document.getElementById("developer-settings-section"),
         resetBtn: document.getElementById("reset-btn"),
         catalogSearch: document.getElementById("catalog-search-input"),
         filterSelect: document.getElementById("catalog-filter-select"),
@@ -1019,6 +1026,7 @@
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
     highlightCatalogCard(questId);
   }
 
@@ -1096,12 +1104,38 @@
     ui.refs.monthlyYearlyStatus.textContent = `Badge: ${state.game.cycles.monthly.badgeId || "-"} • Reliques: ${state.game.cycles.yearly.relicsUnlocked.length} • Milestones: ${state.game.cycles.yearly.milestonesClaimed.length}`;
     ui.refs.claimWeeklyChestBtn.disabled = !chestTier || weekly.chestClaimed;
 
-    ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
-    ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
-    ui.refs.debugDateState.textContent = state.game.debug.useDebugDate ? "ON" : "OFF";
-    ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
+    renderSettingsTab();
 
     renderStats();
+  }
+
+
+
+  function renderSettingsTab() {
+    ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
+    ui.refs.hapticsToggle.checked = state.settings.hapticsEnabled;
+
+    ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
+    ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
+    ui.refs.vacationRemainingLabel.textContent = `Vacances restantes : ${state.game.progress.vacationDaysRemaining}`;
+
+    ui.refs.developerModeToggle.checked = state.settings.developerModeEnabled;
+    ui.refs.developerModeState.textContent = state.settings.developerModeEnabled ? "ON" : "OFF";
+    ui.refs.developerSettingsSection.hidden = !state.settings.developerModeEnabled;
+
+    if (!state.settings.developerModeEnabled) {
+      ui.refs.debugDateToggle.checked = false;
+      ui.refs.debugDateState.textContent = "OFF";
+      ui.refs.debugDateInput.disabled = true;
+      ui.refs.debugDateInput.value = "";
+    } else {
+      ui.refs.debugDateToggle.checked = state.game.debug.useDebugDate;
+      ui.refs.debugDateState.textContent = state.game.debug.useDebugDate ? "ON" : "OFF";
+      ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
+      ui.refs.debugDateInput.value = state.game.debug.debugDate || "";
+    }
+
+    ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
   }
 
   function getFilteredCatalog() {
@@ -1239,6 +1273,7 @@
     closeQuestEditor();
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
     highlightCatalogCard(ui.editor.mode === "edit" ? ui.editor.questId : Array.from(ui.selectedIds)[0]);
   }
 
@@ -1255,6 +1290,7 @@
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
     highlightCatalogCard(id);
   }
 
@@ -1273,6 +1309,7 @@
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
     ui.showToast("Habitude supprimée");
     haptics.warning();
   }
@@ -1284,6 +1321,7 @@
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
     ui.showToast("Progression réinitialisée");
   }
 
@@ -1298,6 +1336,7 @@
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
     ui.showToast("Catalogue réinitialisé");
   }
 
@@ -1352,7 +1391,22 @@
       if (state.settings.hapticsEnabled) haptics.tap();
     });
 
+    ui.refs.developerModeToggle.addEventListener("change", () => {
+      state.settings.developerModeEnabled = ui.refs.developerModeToggle.checked;
+      ui.refs.developerModeState.textContent = state.settings.developerModeEnabled ? "ON" : "OFF";
+      if (!state.settings.developerModeEnabled) {
+        state.game.debug.useDebugDate = false;
+        state.game.debug.debugDate = null;
+        handleDayChange();
+        storage.saveState(state.game);
+      }
+      storage.saveSettings(state.settings);
+      renderTodayTab();
+      renderSettingsTab();
+    });
+
     ui.refs.debugDateToggle.addEventListener("change", () => {
+      if (!state.settings.developerModeEnabled) return;
       state.game.debug.useDebugDate = ui.refs.debugDateToggle.checked;
       if (!state.game.debug.useDebugDate) state.game.debug.debugDate = null;
       ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
@@ -1363,14 +1417,16 @@
       handleDayChange();
       storage.saveState(state.game);
       renderTodayTab();
+      renderSettingsTab();
     });
 
     ui.refs.debugDateInput.addEventListener("change", () => {
-      if (!ui.refs.debugDateInput.value) return;
+      if (!state.settings.developerModeEnabled || !ui.refs.debugDateInput.value) return;
       state.game.debug.debugDate = ui.refs.debugDateInput.value;
       handleDayChange();
       storage.saveState(state.game);
       renderTodayTab();
+      renderSettingsTab();
     });
 
     ui.refs.vacationToggle.addEventListener("change", () => {
@@ -1394,6 +1450,7 @@
       state.game.daily.vacationMode = wantsVacation;
       storage.saveState(state.game);
       renderTodayTab();
+      renderSettingsTab();
     });
 
     ui.refs.catalogList.addEventListener("click", (event) => {
@@ -1441,6 +1498,7 @@
       }
       storage.saveState(state.game);
       renderTodayTab();
+      renderSettingsTab();
     });
 
     ui.refs.editorModal.addEventListener("click", (event) => {
@@ -1504,12 +1562,7 @@
     ui.createSort = ["recent", "az", "xpDesc", "goldDesc"].includes(state.createUi.sort) ? state.createUi.sort : "recent";
     ui.refs.filterSelect.value = ui.createFilter;
     ui.refs.sortSelect.value = ui.createSort;
-    ui.refs.hapticsToggle.checked = state.settings.hapticsEnabled;
-    ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
-    ui.refs.debugDateToggle.checked = state.game.debug.useDebugDate;
-    ui.refs.debugDateInput.disabled = !state.game.debug.useDebugDate;
-    ui.refs.debugDateInput.value = state.game.debug.debugDate || "";
-    ui.refs.vacationToggle.checked = state.game.daily.vacationMode === true;
+    renderSettingsTab();
     cleanupCompletedIds();
     recomputeTotalXp();
     const computedLevel = computeLevelProgress(state.game.totalXp).level;
@@ -1521,6 +1574,7 @@
     storage.saveState(state.game);
     renderTodayTab();
     renderCreateTab();
+    renderSettingsTab();
   }
 
   document.addEventListener("DOMContentLoaded", init);

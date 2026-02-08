@@ -573,7 +573,7 @@ h1 {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.6rem;
 }
 
@@ -953,4 +953,50 @@ h1 {
 .debug-date-panel input[type="date"] {
   width: 100%;
   min-height: 2.5rem;
+}
+
+
+.settings-panel {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: linear-gradient(160deg, rgba(22, 46, 106, 0.95), rgba(20, 40, 94, 0.85));
+  box-shadow: var(--shadow-soft);
+  padding: var(--space-4);
+  display: grid;
+  gap: 0.9rem;
+}
+
+.settings-section {
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(204, 220, 255, 0.26);
+  padding: var(--space-2);
+  background: rgba(17, 36, 85, 0.7);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.settings-section h3 {
+  font-size: 1rem;
+}
+
+.settings-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.settings-actions {
+  display: grid;
+  gap: 0.6rem;
+}
+
+@media (max-width: 620px) {
+  .tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .toggle-field {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
