@@ -1575,12 +1575,13 @@
 
   function renderForActiveTab() {
     if (ui.activeTab === "today") renderTodayTab();
-    if (ui.activeTab === "create") renderCreateTab();
+    if (ui.activeTab === "catalogue") renderCreateTab();
     if (ui.activeTab === "settings") renderSettingsTab();
   }
 
   function setActiveTab(tabId) {
-    ui.activeTab = tabId;
+    const allowedTabs = new Set(["today", "catalogue", "settings"]);
+    ui.activeTab = allowedTabs.has(tabId) ? tabId : "today";
     ui.refs.tabButtons.forEach((btn) => {
       const isActive = btn.dataset.tabTarget === ui.activeTab;
       btn.classList.toggle("is-active", isActive);
