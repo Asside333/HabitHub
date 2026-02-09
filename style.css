@@ -76,7 +76,7 @@ p {
   margin: 0 auto;
   padding: clamp(1rem, 2.8vw, 2rem);
   display: grid;
-  gap: var(--space-24);
+  gap: var(--space-16);
 }
 
 .hero {
@@ -303,6 +303,43 @@ h1 {
   font-size: clamp(1.35rem, 3.2vw, 1.8rem);
 }
 
+
+.xp-hero-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.today-layout {
+  display: grid;
+  gap: var(--space-12);
+}
+
+.today-stats-row {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.stat-chip {
+  padding: var(--space-12);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.stat-chip .counter {
+  font-size: clamp(1.05rem, 2.8vw, 1.35rem);
+}
+
+.quests-section {
+  padding: var(--space-16);
+}
+
+.stats {
+  padding: var(--space-16);
+}
 .session-progress,
 
 .progress-accordion {
@@ -880,7 +917,7 @@ body.reduce-motion .xp-hero-fill {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-8);
 }
 
@@ -1260,6 +1297,21 @@ body.reduce-motion .xp-hero-fill {
   }
 }
 
+
+@media (max-width: 760px) {
+  .today-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .xp-hero-head {
+    align-items: flex-start;
+  }
+
+  .xp-hero-meta {
+    justify-content: flex-start;
+  }
+}
+
 .debug-date-panel {
   margin-top: var(--space-3);
   border-radius: var(--radius-md);
@@ -1335,7 +1387,7 @@ body.reduce-motion .xp-hero-fill {
     right: 0.6rem;
     bottom: calc(0.6rem + env(safe-area-inset-bottom));
     z-index: 120;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     background: rgba(11, 29, 72, 0.95);
     border: 1px solid var(--outline);
     border-radius: var(--radius-lg);

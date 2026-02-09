@@ -8,30 +8,14 @@
   </head>
   <body>
     <main class="app-shell">
-      <header class="hero" aria-label="En-tête de l'application">
-        <div>
-          <p class="hero-kicker">HabitHub</p>
-          <h1>Transforme tes habitudes en mini-aventure</h1>
-          <p class="subtitle">Quêtes rapides, récompenses instantanées, 100% hors ligne.</p>
-        </div>
-        <div class="hero-badges">
-          <span class="badge" aria-label="Version MVP offline">MVP • Offline</span>
-          <span id="level-badge" class="badge badge-level" aria-live="polite">Lv 1</span>
-        </div>
-      </header>
-
       <nav class="tabs app-nav" aria-label="Navigation principale">
         <button type="button" class="btn btn-ghost tab-btn is-active" data-tab-target="today" aria-controls="tab-today">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4 4 10v10h16V10z"/><path d="M9 20v-6h6v6"/></svg></span>
           <span class="nav-label">Aujourd'hui</span>
         </button>
-        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="create" aria-controls="tab-create">
+        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="catalogue" aria-controls="tab-catalogue">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="2" fill="none"/></svg></span>
           <span class="nav-label">Catalogue</span>
-        </button>
-        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="create" aria-controls="tab-create">
-          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" fill="none"/></svg></span>
-          <span class="nav-label">Créer</span>
         </button>
         <button type="button" class="btn btn-ghost tab-btn" data-tab-target="settings" aria-controls="tab-settings">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z"/><path d="m20 13.2-1.6.5a6.7 6.7 0 0 1-.4 1l.9 1.4-1.8 1.8-1.4-.9a6.7 6.7 0 0 1-1 .4L13.2 20h-2.4l-.5-1.6a6.7 6.7 0 0 1-1-.4l-1.4.9-1.8-1.8.9-1.4a6.7 6.7 0 0 1-.4-1L4 13.2v-2.4l1.6-.5a6.7 6.7 0 0 1 .4-1L5 7.9l1.8-1.8 1.4.9a6.7 6.7 0 0 1 1-.4L10.8 4h2.4l.5 1.6a6.7 6.7 0 0 1 1 .4l1.4-.9L18 7.9l-.9 1.4a6.7 6.7 0 0 1 .4 1l1.6.5z"/></svg></span>
@@ -43,7 +27,10 @@
         <section class="card xp-hero" aria-live="polite" aria-labelledby="xp-hero-title">
           <div class="xp-hero-head">
             <h2 id="xp-hero-title">Niveau 1</h2>
-            <p id="xp-hero-text" class="xp-hero-text">XP: 0 / 50</p>
+            <div class="xp-hero-meta">
+              <p id="xp-hero-text" class="xp-hero-text">XP: 0 / 50</p>
+              <span id="level-badge" class="badge badge-level" aria-live="polite">Lv 1</span>
+            </div>
           </div>
           <div class="progress-track xp-hero-track" id="xp-hero-track" role="progressbar" aria-label="Progression XP niveau actuel">
             <div id="xp-hero-bar" class="progress-fill xp-hero-fill"></div>
@@ -51,35 +38,41 @@
           <p id="xp-hero-remaining" class="progress-subtext xp-hero-remaining">Reste: 50 XP</p>
         </section>
 
-        <div class="layout-grid">
-          <section class="card stats" aria-labelledby="stats-title">
-            <div class="stats-head">
-              <h2 id="stats-title">Progression</h2>
-            </div>
+        <div class="today-layout">
+          <section class="today-stats-row" aria-label="Stats rapides">
+            <article class="card stat-chip" aria-label="Points d'expérience">
+              <p class="label">XP total</p>
+              <strong id="xp-value" class="counter">0</strong>
+            </article>
+            <article class="card stat-chip" aria-label="Pièces d'or">
+              <p class="label">Gold</p>
+              <strong id="gold-value" class="counter">0</strong>
+            </article>
+            <article class="card stat-chip" aria-live="polite" aria-label="Streak active">
+              <p class="label">Streak</p>
+              <strong id="streak-status">Streak: 0 jour(s)</strong>
+            </article>
+          </section>
 
-            <div class="stats-grid">
-              <article class="stat-card" aria-label="Points d'expérience">
-                <div class="stat-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 2 9.2 8.1 2.6 9l4.9 4.6-1.2 6.4L12 16.8 17.7 20l-1.2-6.4L21.4 9l-6.6-.9z" /></svg></div>
-                <div><p class="label">XP total</p><strong id="xp-value" class="counter">0</strong></div>
-              </article>
-              <article class="stat-card" aria-label="Pièces d'or">
-                <div class="stat-icon gold" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" /><path d="M9.2 10.1c0-1.1.9-1.9 2.6-1.9 1.4 0 2.5.5 3.2 1.1l-1 1.6c-.6-.5-1.3-.8-2.1-.8-.7 0-1.1.2-1.1.6 0 .4.5.6 1.9 1 1.8.5 2.8 1.1 2.8 2.7 0 1.8-1.4 2.8-3.4 2.8-1.6 0-3-.5-3.9-1.4l1.1-1.5c.7.6 1.6 1.1 2.7 1.1.8 0 1.2-.2 1.2-.7 0-.4-.5-.6-1.8-1-1.9-.5-3-1.2-3-2.6z" /></svg></div>
-                <div><p class="label">Gold</p><strong id="gold-value" class="counter">0</strong></div>
-              </article>
-            </div>
-
+          <section class="card quests-section" aria-labelledby="quests-title">
+            <h2 id="quests-title">Quêtes du jour</h2>
             <div class="session-progress" aria-live="polite">
               <div class="progress-label-row"><p class="label">Quêtes du jour</p><strong id="session-progress-text">0 / 0</strong></div>
               <div class="progress-track" id="session-progress-track" role="progressbar"><div id="session-progress-bar" class="progress-fill"></div></div>
             </div>
+            <ul id="quests-list" class="quests-list"></ul>
+          </section>
 
+          <section class="card stats" aria-labelledby="stats-title">
+            <div class="stats-head">
+              <h2 id="stats-title">Progression</h2>
+            </div>
             <section class="progress-accordion" aria-live="polite">
               <details class="progress-card">
                 <summary>Jour</summary>
                 <div class="progress-card-body">
                   <div class="progress-label-row"><p class="label">Paliers du jour</p><strong id="daily-tier-status">Bronze dès 1</strong></div>
                   <p id="daily-tier-rule" class="progress-subtext">Argent dès 3 objectifs • Or dès 5 objectifs</p>
-                  <div class="progress-label-row"><p class="label">Streak saine</p><strong id="streak-status">Streak: 0 jour(s)</strong></div>
                   <p id="streak-protections" class="progress-subtext">Shield: 1/1 • Rest cette semaine: 0/1 • Vacances restantes: 14</p>
                 </div>
               </details>
@@ -105,15 +98,10 @@
               <p id="level-progress-remaining" class="progress-subtext">Reste: 0 XP</p>
             </div>
           </section>
-
-          <section class="card quests-section" aria-labelledby="quests-title">
-            <h2 id="quests-title">Quêtes du jour</h2>
-            <ul id="quests-list" class="quests-list"></ul>
-          </section>
         </div>
       </section>
 
-      <section id="tab-create" data-tab-panel="create" hidden>
+      <section id="tab-catalogue" data-tab-panel="catalogue" hidden>
         <section class="card manage-panel" aria-labelledby="create-title">
           <div class="create-toolbar">
             <h2 id="create-title">Catalogue des habitudes</h2>
