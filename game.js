@@ -10,6 +10,38 @@
     return date.toISOString().slice(0, 10);
   }
 
+  const errorLog = [];
+
+  function pushErrorLog(kind, payload) {
+    const entry = {
+      at: new Date().toISOString(),
+      kind,
+      payload,
+    };
+    errorLog.push(entry);
+    const maxEntries = 30;
+    if (errorLog.length > maxEntries) errorLog.splice(0, errorLog.length - maxEntries);
+    console.error("[HabitHub ErrorBoundary]", kind, payload);
+  }
+
+  function setupErrorBoundary() {
+    window.addEventListener("error", (event) => {
+      pushErrorLog("window.error", {
+        message: event.message || "unknown_error",
+        source: event.filename || "inline",
+        line: event.lineno || 0,
+        column: event.colno || 0,
+      });
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      const reason = event.reason;
+      pushErrorLog("window.unhandledrejection", {
+        message: reason instanceof Error ? reason.message : String(reason || "unknown_rejection"),
+      });
+    });
+  }
+
   function createInitialGameState() {
     const seed = cloneJson(INITIAL_GAME_STATE);
     seed.quests.completedQuestIds = Array.isArray(seed.quests.completedQuestIds) ? seed.quests.completedQuestIds : [];
@@ -344,10 +376,16 @@
 
   function validateState(candidate) {
     const errors = [];
+    const warnings = [];
+    const corrections = [];
+
     if (!candidate || typeof candidate !== "object") {
-      return { ok: false, errors: ["state_not_object"] };
+      return { ok: false, errors: ["state_not_object"], warnings, corrections, value: createInitialGameState() };
     }
+
     const stateValue = normalizeGameState(candidate);
+    const beforeRaw = JSON.stringify(candidate);
+
     if (!Number.isInteger(stateValue.v) || stateValue.v < 1) errors.push("invalid_version");
     if (!isFiniteNumber(stateValue.xp) || stateValue.xp < 0) errors.push("invalid_xp");
     if (!isFiniteNumber(stateValue.totalXp) || stateValue.totalXp < 0) errors.push("invalid_total_xp");
@@ -358,16 +396,54 @@
       errors.push("invalid_reward_claims");
     }
     if (!stateValue.daily || typeof stateValue.daily !== "object") errors.push("invalid_daily");
+
+    const activeDateKey = stateValue.debug.useDebugDate && stateValue.debug.debugDate ? stateValue.debug.debugDate : toIsoDate(new Date());
+    if (stateValue.daily.dateKey && typeof stateValue.daily.dateKey !== "string") {
+      corrections.push("daily.dateKey_fallback_to_active_date");
+      stateValue.daily.dateKey = activeDateKey;
+    }
+    const rewardClaims = stateValue.claims.rewardClaims || {};
+    Object.entries(rewardClaims).forEach(([claimKey, claim]) => {
+      if (!claimKey.includes(":")) {
+        warnings.push(`reward_claim_key_invalid:${claimKey}`);
+      }
+      if (!Number.isFinite(Number(claim?.xpGranted ?? claim?.xp))) {
+        corrections.push(`reward_claim_xp_fixed:${claimKey}`);
+        rewardClaims[claimKey].xpGranted = 0;
+        rewardClaims[claimKey].xp = 0;
+      }
+      if (!Number.isFinite(Number(claim?.goldGranted ?? claim?.gold))) {
+        corrections.push(`reward_claim_gold_fixed:${claimKey}`);
+        rewardClaims[claimKey].goldGranted = 0;
+        rewardClaims[claimKey].gold = 0;
+      }
+    });
+
+    const claimedXp = computeClaimedXpTotal(stateValue.claims);
+    if (stateValue.totalXp < claimedXp) {
+      corrections.push("totalXp_aligned_with_rewardClaims");
+      stateValue.totalXp = claimedXp;
+      stateValue.currencies.totalXp = claimedXp;
+    }
+
+    const afterRaw = JSON.stringify(stateValue);
+    if (beforeRaw !== afterRaw && corrections.length === 0) {
+      corrections.push("normalized_legacy_shape");
+    }
+
     return {
       ok: errors.length === 0,
       value: stateValue,
       errors,
+      warnings,
+      corrections,
     };
   }
 
   // === SECTION: State persistence (load/save/migrations) ===
   const storage = {
     hasPendingCatalogMigration: false,
+    lastValidationReport: null,
     keys: {
       save: "habitrpg.save",
       saveTemp: "habitrpg.save.tmp",
@@ -454,6 +530,7 @@
         const validation = validateState(migrated);
         if (validation.ok) {
           const safeState = validation.value;
+          this.lastValidationReport = validation;
           const metadataChanged = Number(save.schemaVersion) !== safeState.v || typeof save.updatedAt !== "string";
           if (metadataChanged || JSON.stringify(save.state) !== JSON.stringify(safeState)) {
             this.saveEnvelopeAtomically({
@@ -465,6 +542,7 @@
           return safeState;
         }
         this.backupCorruptPayload(save, validation.errors);
+        this.lastValidationReport = validation;
         return createInitialGameState();
       }
 
@@ -472,8 +550,12 @@
       if (legacy && typeof legacy === "object") {
         const migratedLegacy = this.migrateState(legacy, 1);
         const validation = validateState(migratedLegacy);
-        if (validation.ok) return validation.value;
+        if (validation.ok) {
+          this.lastValidationReport = validation;
+          return validation.value;
+        }
         this.backupCorruptPayload(legacy, validation.errors);
+        this.lastValidationReport = validation;
         return createInitialGameState();
       }
       return createInitialGameState();
@@ -482,6 +564,7 @@
       const next = toPersistedGameState(gameState);
       assertState(next);
       const validation = validateState(next);
+      this.lastValidationReport = validation;
       const safeState = validation.ok ? validation.value : createInitialGameState();
       if (!validation.ok) this.backupCorruptPayload(next, validation.errors);
       this.saveEnvelopeAtomically({
@@ -656,6 +739,11 @@
         debugDateToggle: document.getElementById("debug-date-toggle"),
         debugDateState: document.getElementById("debug-date-state"),
         debugDateInput: document.getElementById("debug-date-input"),
+        devRunValidatorBtn: document.getElementById("dev-run-validator-btn"),
+        devExportSnapshotBtn: document.getElementById("dev-export-snapshot-btn"),
+        devRunSelfTestsBtn: document.getElementById("dev-run-self-tests-btn"),
+        devValidatorStatus: document.getElementById("dev-validator-status"),
+        devSelfTestsOutput: document.getElementById("dev-self-tests-output"),
         activeDateLabel: document.getElementById("active-date-label"),
         devTechInfo: document.getElementById("dev-tech-info"),
         vacationRemainingLabel: document.getElementById("vacation-remaining-label"),
@@ -1949,56 +2037,78 @@
     return { applied: true, xpDelta: -xpRollback, goldDelta: -goldRollback, reason: "rolled_back" };
   }
 
-  function rollbackCompletedQuest(quest, dateKey) {
-    state.game.completedQuestIds = state.game.completedQuestIds.filter((id) => id !== quest.id);
-    state.game.quests.completedQuestIds = state.game.completedQuestIds;
-    return claimReward({ actionId: quest.id, dateKey, mode: "rollback" });
+  function applyQuestToggle(params) {
+    const habitId = typeof params?.habitId === "string" ? params.habitId : "";
+    const quest = getQuestById(habitId);
+    if (!quest || quest.isHidden) {
+      return { ok: false, reason: "invalid_habit", nextState: state.game, sideEffects: {} };
+    }
+
+    handleDayChange();
+    const dateKey = typeof params?.dateKey === "string" && params.dateKey ? params.dateKey : getActiveDateIso();
+    const currentlyCompleted = state.game.completedQuestIds.includes(habitId);
+    const nextCompleted = typeof params?.nextCompleted === "boolean" ? params.nextCompleted : !currentlyCompleted;
+
+    if (nextCompleted === currentlyCompleted) {
+      return { ok: true, reason: "noop", nextState: state.game, sideEffects: { dateKey, habitId, currentlyCompleted, nextCompleted } };
+    }
+
+    let rewardResult;
+    if (!nextCompleted) {
+      state.game.completedQuestIds = state.game.completedQuestIds.filter((id) => id !== habitId);
+      state.game.quests.completedQuestIds = state.game.completedQuestIds;
+      rewardResult = claimReward({ actionId: quest.id, dateKey, mode: "rollback" });
+    } else {
+      state.game.completedQuestIds.push(habitId);
+      state.game.quests.completedQuestIds = state.game.completedQuestIds;
+      rewardResult = claimReward({ actionId: quest.id, dateKey, habit: quest, mode: "claim" });
+    }
+
+    ensureDailyProgressState();
+    const validation = validateState(state.game);
+    state.game = validation.value;
+
+    return {
+      ok: true,
+      reason: rewardResult.reason,
+      rewardResult,
+      validation,
+      nextState: state.game,
+      sideEffects: { dateKey, habitId, currentlyCompleted, nextCompleted },
+    };
   }
 
   function toggleQuestCompletion(questId) {
-    const quest = getQuestById(questId);
-    if (!quest || quest.isHidden) return;
-    handleDayChange();
-    const dateKey = getActiveDateIso();
     const completed = state.game.completedQuestIds.includes(questId);
+    const result = applyQuestToggle({ habitId: questId, dateKey: getActiveDateIso(), nextCompleted: !completed });
+    if (!result.ok) return;
 
-    let rewardResult;
-    if (completed) {
+    if (!result.sideEffects.nextCompleted) {
       ui.lastCompletedQuestId = null;
-      rewardResult = rollbackCompletedQuest(quest, dateKey);
-      if (rewardResult.applied) {
-        ui.showToast("info", "Quête annulée", formatRewardText(rewardResult.xpDelta, rewardResult.goldDelta, false));
+      if (result.rewardResult?.applied) {
+        ui.showToast("info", "Quête annulée", formatRewardText(result.rewardResult.xpDelta, result.rewardResult.goldDelta, false));
       }
       haptics.undo();
     } else {
-      state.game.completedQuestIds.push(questId);
-      state.game.quests.completedQuestIds = state.game.completedQuestIds;
-      rewardResult = claimReward({
-        actionId: quest.id,
-        dateKey,
-        habit: quest,
-        mode: "claim",
-      });
-      if (rewardResult.applied) {
+      if (result.rewardResult?.applied) {
         ui.lastCompletedQuestId = questId;
-        if (rewardResult.reason === "cap_reached") {
+        if (result.rewardResult.reason === "cap_reached") {
           ui.showToast("info", "Cap atteint", "0 gain pour aujourd'hui.");
           haptics.error();
           audioFx.play("pop");
-        } else if (rewardResult.reason === "claim_partial") {
-          ui.showToast("info", "Quête validée (cap)", formatRewardText(rewardResult.xpDelta, rewardResult.goldDelta, true));
+        } else if (result.rewardResult.reason === "claim_partial") {
+          ui.showToast("info", "Quête validée (cap)", formatRewardText(result.rewardResult.xpDelta, result.rewardResult.goldDelta, true));
         } else {
-          ui.showToast("success", "Quête validée", formatRewardText(rewardResult.xpDelta, rewardResult.goldDelta, true));
+          ui.showToast("success", "Quête validée", formatRewardText(result.rewardResult.xpDelta, result.rewardResult.goldDelta, true));
         }
-      } else if (rewardResult.reason === "already_claimed") {
+      } else if (result.rewardResult?.reason === "already_claimed") {
         ui.showToast("info", "Déjà récupérée", "Récompense déjà récupérée aujourd'hui.");
       }
       haptics.complete();
       audioFx.play("pop");
     }
 
-    ensureDailyProgressState();
-    debugDerivedProgress(completed ? "toggle:rollback" : "toggle:claim");
+    debugDerivedProgress(result.sideEffects.nextCompleted ? "toggle:claim" : "toggle:rollback");
     storage.saveState(state.game);
     renderForActiveTab();
     highlightCatalogCard(questId);
@@ -2147,7 +2257,7 @@
     ui.refs.streakStatus.textContent = `Streak: ${state.game.progress.streak} jour(s)`;
     ui.refs.streakProtections.textContent = `Shield: ${state.game.progress.streakShield}/1 • Rest cette semaine: ${Math.max(0, Number(state.game.progress.restDaysUsedByWeek[getWeekKey(getActiveDateIso())]) || 0)}/${Math.max(0, Number(PROGRESSION_CONFIG.streakRules?.restDayRules?.maxPerWeek) || 0)} • Vacances restantes: ${state.game.progress.vacationDaysRemaining}`;
 
-    const progress = computeProgress(state.game, getActiveDateIso());
+    const progress = computeDerivedProgress(state.game, getActiveDateIso());
     const weekly = state.game.cycles.weekly;
     const chestTier = getWeeklyChestTier(progress.week.value);
     renderProgressBar({
@@ -2196,7 +2306,7 @@
 
   function renderProgressionTab() {
     const dailyState = ensureDailyProgressState();
-    const progress = computeProgress(state.game, getActiveDateIso());
+    const progress = computeDerivedProgress(state.game, getActiveDateIso());
     const dailyTotals = getDailyRewardTotals(getActiveDateIso());
     const dailyCaps = getDailyCaps(state.game.level);
     const bronzeMin = Math.max(1, Number(PROGRESSION_CONFIG.dailyTiers?.bronze?.minObjectives) || 1);
@@ -2381,7 +2491,15 @@
     }
 
     ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
-    ui.refs.devTechInfo.textContent = `Clé save: ${storage.keys.save} • Schéma: v${state.game.v}`;
+    const lastReport = storage.lastValidationReport;
+    if (ui.refs.devValidatorStatus) {
+      if (!lastReport) {
+        ui.refs.devValidatorStatus.textContent = "Validator: -";
+      } else {
+        ui.refs.devValidatorStatus.textContent = `Validator: ${lastReport.errors.length} erreur(s), ${lastReport.warnings.length} warning(s), ${lastReport.corrections.length} correction(s)`;
+      }
+    }
+    ui.refs.devTechInfo.textContent = `Clé save: ${storage.keys.save} • Schéma: v${state.game.v} • Errors capturées: ${errorLog.length}`;
     renderInstallUi();
   }
 
@@ -2405,7 +2523,7 @@
 
   function debugDerivedProgress(contextLabel) {
     if (!state.settings.advancedModeEnabled) return;
-    const computed = computeProgress(state.game, getActiveDateIso());
+    const computed = computeDerivedProgress(state.game, getActiveDateIso());
     console.debug("[HabitHub] progress derived", {
       context: contextLabel,
       weeklyScore: computed.meta.weeklyScore,
@@ -2428,6 +2546,10 @@
       subLabel,
       isMaxZero: safeMax <= 0,
     };
+  }
+
+  function computeDerivedProgress(gameState, activeDateKey) {
+    return computeProgress(gameState, activeDateKey);
   }
 
   function computeProgress(gameState, activeDateKey) {
@@ -2873,6 +2995,104 @@
   }
 
   // === SECTION: Event handlers ===
+  function runValidatorAndReport(showToast = true) {
+    const before = JSON.stringify(state.game);
+    const report = validateState(state.game);
+    state.game = report.value;
+    const changed = before !== JSON.stringify(report.value);
+    if (changed) storage.saveState(state.game);
+
+    const issueCount = report.errors.length + report.warnings.length;
+    const status = issueCount === 0
+      ? "Validator: OK (0 erreur, 0 warning)"
+      : `Validator: ${report.errors.length} erreur(s), ${report.warnings.length} warning(s), ${report.corrections.length} correction(s)`;
+    if (ui.refs.devValidatorStatus) ui.refs.devValidatorStatus.textContent = status;
+
+    if (showToast) {
+      const toastType = report.errors.length ? "error" : (report.warnings.length ? "warn" : "success");
+      ui.showToast(toastType, "Validator", status);
+    }
+    return report;
+  }
+
+  async function exportDebugSnapshot() {
+    const payload = {
+      generatedAt: new Date().toISOString(),
+      activeDateKey: getActiveDateIso(),
+      validation: runValidatorAndReport(false),
+      derived: computeDerivedProgress(state.game, getActiveDateIso()),
+      errorLog: [...errorLog],
+      state: toPersistedGameState(state.game),
+    };
+    const text = JSON.stringify(payload, null, 2);
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      ui.showToast("success", "Snapshot", "Debug snapshot copié dans le presse-papiers.");
+      return;
+    }
+    ui.showToast("warn", "Snapshot", "Clipboard indisponible, copie manuelle requise.");
+    if (ui.refs.devSelfTestsOutput) ui.refs.devSelfTestsOutput.textContent = text;
+  }
+
+  function runSelfTests() {
+    const results = [];
+    const snapshot = toPersistedGameState(state.game);
+    let failed = 0;
+
+    function check(name, predicate, details) {
+      const pass = Boolean(predicate);
+      if (!pass) failed += 1;
+      results.push({ name, pass, details: pass ? "OK" : details });
+    }
+
+    try {
+      state.game = createInitialGameState();
+      const testQuest = catalog.getVisibleQuests()[0];
+      const baseDate = getActiveDateIso();
+      const beforeXp = state.game.totalXp;
+
+      applyQuestToggle({ habitId: testQuest.id, dateKey: baseDate, nextCompleted: true });
+      const afterFirst = state.game.totalXp;
+      applyQuestToggle({ habitId: testQuest.id, dateKey: baseDate, nextCompleted: true });
+      check("No double gain on repeat complete", state.game.totalXp === afterFirst, { beforeXp, afterFirst, finalXp: state.game.totalXp });
+
+      applyQuestToggle({ habitId: testQuest.id, dateKey: baseDate, nextCompleted: false });
+      check("Undo restores previous XP totals", state.game.totalXp === beforeXp, { beforeXp, finalXp: state.game.totalXp });
+
+      const beforeDerived = computeDerivedProgress(state.game, baseDate);
+      applyQuestToggle({ habitId: testQuest.id, dateKey: baseDate, nextCompleted: true });
+      const afterDerived = computeDerivedProgress(state.game, baseDate);
+      applyQuestToggle({ habitId: testQuest.id, dateKey: baseDate, nextCompleted: false });
+      const rollbackDerived = computeDerivedProgress(state.game, baseDate);
+      check("Derived progress increases/decreases with toggles", afterDerived.week.value >= beforeDerived.week.value && rollbackDerived.week.value === beforeDerived.week.value, {
+        before: beforeDerived.week.value,
+        after: afterDerived.week.value,
+        rollback: rollbackDerived.week.value,
+      });
+
+      const baseDateObj = new Date(`${baseDate}T00:00:00Z`);
+      const nextDate = Number.isFinite(baseDateObj.getTime())
+        ? toIsoDate(new Date(baseDateObj.getTime() + (24 * 3600 * 1000)))
+        : toIsoDate(new Date());
+      const activeToday = computeDerivedProgress(state.game, baseDate).day.value;
+      const activeNext = computeDerivedProgress(state.game, nextDate).day.value;
+      check("Changing dateKey affects daily/week aggregation consistently", activeNext <= activeToday, { activeToday, activeNext, baseDate, nextDate });
+
+      const report = validateState(state.game);
+      check("No NaN/negative anywhere after sequence", report.errors.length === 0, { errors: report.errors, warnings: report.warnings });
+    } catch (error) {
+      failed += 1;
+      results.push({ name: "Runner execution", pass: false, details: error instanceof Error ? error.message : String(error) });
+    } finally {
+      state.game = snapshot;
+    }
+
+    const lines = results.map((entry) => `${entry.pass ? "PASS" : "FAIL"} - ${entry.name}${entry.pass ? "" : `\n  ${JSON.stringify(entry.details)}`}`);
+    lines.push(`Summary: ${results.length - failed}/${results.length} PASS`);
+    if (ui.refs.devSelfTestsOutput) ui.refs.devSelfTestsOutput.textContent = lines.join("\n");
+    return { failed, results };
+  }
+
   function attachEvents() {
     const unlockAudioOnce = () => {
       audioFx.unlock();
@@ -3211,6 +3431,30 @@
       renderSettingsTab();
     });
 
+    ui.refs.devRunValidatorBtn?.addEventListener("click", () => {
+      runValidatorAndReport(true);
+      storage.saveState(state.game);
+      renderSettingsTab();
+    });
+
+    ui.refs.devExportSnapshotBtn?.addEventListener("click", async () => {
+      try {
+        await exportDebugSnapshot();
+      } catch (error) {
+        ui.showToast("error", "Snapshot", error instanceof Error ? error.message : "Export impossible.");
+      }
+    });
+
+    ui.refs.devRunSelfTestsBtn?.addEventListener("click", () => {
+      const report = runSelfTests();
+      if (report.failed > 0) {
+        ui.showToast("error", "Self-tests", `${report.failed} test(s) en échec.`);
+      } else {
+        ui.showToast("success", "Self-tests", "Tous les tests sont PASS.");
+      }
+      renderSettingsTab();
+    });
+
     ui.refs.vacationToggle.addEventListener("change", () => {
       const wantsVacation = ui.refs.vacationToggle.checked;
       const vacationEnabled = PROGRESSION_CONFIG.streakRules?.vacationRules?.enabled;
@@ -3375,6 +3619,7 @@
   }
 
   function init() {
+    setupErrorBoundary();
     ui.bindRefs();
     ui.createFilter = FILTER_LABELS[state.createUi.filter] ? state.createUi.filter : "all";
     ui.createSort = ["recent", "az", "xpDesc"].includes(state.createUi.sort) ? state.createUi.sort : "recent";
@@ -3392,9 +3637,13 @@
     state.game.currencies.totalXp = state.game.totalXp;
     handleDayChange();
     attachEvents();
+    const startupReport = runValidatorAndReport(false);
     storage.saveSettings(state.settings);
     storage.saveState(state.game);
     renderAllTabs();
+    if (startupReport.corrections.length) {
+      ui.showToast("warn", "Etat auto-corrigé", `${startupReport.corrections.length} correction(s) appliquée(s).`);
+    }
     debugProgressSnapshotOnLoad();
     showOnboardingIfNeeded();
   }

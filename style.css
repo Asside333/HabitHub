@@ -1741,3 +1741,18 @@ body.reduce-motion .pbar--glow .pbar-fill {
   background: rgba(12, 30, 72, 0.7);
   color: var(--text);
 }
+
+
+.dev-output {
+  margin: 0;
+  padding: 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--outline);
+  background: rgba(11, 29, 72, 0.56);
+  color: var(--text);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 88px;
+}

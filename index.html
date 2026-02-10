@@ -317,6 +317,13 @@
             <label class="control-field" for="debug-date-input">Date simulée :
               <input id="debug-date-input" type="date" />
             </label>
+            <div class="settings-actions">
+              <button id="dev-run-validator-btn" class="btn btn-ghost" type="button">Run Validator</button>
+              <button id="dev-export-snapshot-btn" class="btn btn-ghost" type="button">Export Debug Snapshot</button>
+              <button id="dev-run-self-tests-btn" class="btn btn-primary" type="button">Run Self-tests</button>
+            </div>
+            <p id="dev-validator-status" class="progress-subtext">Validator: -</p>
+            <pre id="dev-self-tests-output" class="dev-output" aria-live="polite">Self-tests: non lancés.</pre>
             <p id="active-date-label" class="progress-subtext">Date active : -</p>
             <p id="dev-tech-info" class="progress-subtext">Clé save: habitrpg.save • Schéma: -</p>
           </article>
