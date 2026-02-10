@@ -221,6 +221,22 @@
                 <button type="button" class="btn btn-ghost" data-economy-preset="strict">Strict</button>
               </div>
             </div>
+            <section class="economy-audit" aria-live="polite" aria-labelledby="economy-audit-title">
+              <div class="economy-audit-head">
+                <h4 id="economy-audit-title">Audit économie</h4>
+                <strong id="economy-audit-status" class="audit-indicator audit-indicator-stable">Vert • progression stable</strong>
+              </div>
+              <ul class="economy-audit-list">
+                <li><span>XP potentielle (habitudes visibles)</span><strong id="economy-audit-potential-xp">0 XP</strong></li>
+                <li><span>XP max gagnable aujourd'hui (cap)</span><strong id="economy-audit-max-xp">0 XP</strong></li>
+                <li><span>Temps moyen pour passer un niveau</span><strong id="economy-audit-level-time">0 jour</strong></li>
+              </ul>
+              <p id="economy-audit-source" class="progress-subtext">Base estimation : cap XP/jour</p>
+              <div class="settings-actions">
+                <button id="economy-audit-recommend-btn" type="button" class="btn btn-ghost">Recommandation</button>
+                <p id="economy-audit-recommend-text" class="progress-subtext">Suggestion de cap: -</p>
+              </div>
+            </section>
           </article>
 
           <article id="developer-settings-section" class="card settings-section" aria-labelledby="settings-dev-title" hidden>

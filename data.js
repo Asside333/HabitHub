@@ -89,6 +89,15 @@ const ECONOMY_CONFIG = {
   },
   effortXpTable: [6, 8, 10, 13, 16, 20, 25, 31, 38, 46],
   effortGoldTable: [3, 4, 5, 7, 8, 10, 13, 16, 20, 24],
+  economyAudit: {
+    stableDaysToLevel: { min: 5, max: 14 },
+    recommendation: {
+      targetDaysToLevel: 9,
+      tooFastMultiplier: 0.8,
+      tooSlowMultiplier: 1.2,
+      roundTo: 5,
+    },
+  },
 };
 
 const INITIAL_GAME_STATE = {

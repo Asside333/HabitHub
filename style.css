@@ -1465,6 +1465,75 @@ body.reduce-motion .xp-hero-fill {
   gap: 0.6rem;
 }
 
+.economy-audit {
+  margin-top: 0.35rem;
+  border: 1px solid rgba(145, 196, 255, 0.25);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  background: rgba(11, 32, 80, 0.45);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.economy-audit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.economy-audit-head h4 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.audit-indicator {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.audit-indicator-stable {
+  background: rgba(67, 198, 120, 0.2);
+  color: #cbffde;
+  border: 1px solid rgba(120, 226, 158, 0.5);
+}
+
+.audit-indicator-warning {
+  background: rgba(255, 168, 90, 0.17);
+  color: #ffe2c0;
+  border: 1px solid rgba(255, 194, 130, 0.45);
+}
+
+.economy-audit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.economy-audit-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.economy-audit-list li span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.economy-audit-list li strong {
+  font-size: 0.92rem;
+}
+
 @media (max-width: 620px) {
   .app-shell {
     padding-bottom: calc(92px + env(safe-area-inset-bottom));
