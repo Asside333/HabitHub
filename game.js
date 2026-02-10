@@ -176,6 +176,13 @@
     }, {});
   }
 
+  function getClaimGrantedValue(claim, currency) {
+    if (!claim || typeof claim !== "object") return 0;
+    const grantedKey = currency === "gold" ? "goldGranted" : "xpGranted";
+    const fallbackKey = currency === "gold" ? "gold" : "xp";
+    return Math.max(0, Math.floor(Number(claim[grantedKey] ?? claim[fallbackKey]) || 0));
+  }
+
   function sanitizeDailyState(value) {
     const raw = value && typeof value === "object" ? value : {};
     return {
@@ -674,6 +681,7 @@
   state.game.daily = sanitizeDailyState(state.game.daily);
   state.game.cycles = sanitizeCycles(state.game.cycles);
   state.game.v = clamp(Math.floor(Number(state.game.v) || 1), 1, 999);
+  normalizeRewardClaimsState();
   assertState(state.game);
 
   if (storage.hasPendingCatalogMigration) {
@@ -861,8 +869,7 @@
   function computeClaimedXpTotal(claims) {
     const rewardClaims = claims?.rewardClaims && typeof claims.rewardClaims === "object" ? claims.rewardClaims : {};
     return Object.values(rewardClaims).reduce((acc, claim) => {
-      const xp = Math.max(0, Number(claim?.xp) || 0);
-      return acc + xp;
+      return acc + getClaimGrantedValue(claim, "xp");
     }, 0);
   }
 
@@ -951,12 +958,69 @@
     const prefix = `${safeDateKey}:`;
     return Object.entries(state.game.claims.rewardClaims).reduce((acc, [claimKey, claim]) => {
       if (!claimKey.startsWith(prefix)) return acc;
-      const xp = Math.max(0, Number(claim?.xp) || 0);
-      const gold = Math.max(0, Number(claim?.gold) || 0);
-      acc.xp += xp;
-      acc.gold += gold;
+      acc.xp += getClaimGrantedValue(claim, "xp");
+      acc.gold += getClaimGrantedValue(claim, "gold");
       return acc;
     }, { xp: 0, gold: 0 });
+  }
+
+  function normalizeRewardClaimRecord(claim, claimKey) {
+    if (!claim || typeof claim !== "object") return { changed: false, claim };
+    const xpGranted = getClaimGrantedValue(claim, "xp");
+    const goldGranted = getClaimGrantedValue(claim, "gold");
+    const normalized = {
+      ...claim,
+      xp: xpGranted,
+      gold: goldGranted,
+      xpGranted,
+      goldGranted,
+    };
+    const changed = Number(claim.xp) !== xpGranted
+      || Number(claim.gold) !== goldGranted
+      || Number(claim.xpGranted) !== xpGranted
+      || Number(claim.goldGranted) !== goldGranted;
+    if (changed) {
+      logEvent("CLAIM_CORRECTION", {
+        claimKey,
+        reason: "normalize_granted_reward",
+        before: {
+          xp: Number(claim.xp) || 0,
+          gold: Number(claim.gold) || 0,
+          xpGranted: Number(claim.xpGranted) || 0,
+          goldGranted: Number(claim.goldGranted) || 0,
+        },
+        after: { xp: xpGranted, gold: goldGranted, xpGranted, goldGranted },
+      });
+    }
+    return { changed, claim: normalized };
+  }
+
+  function normalizeRewardClaimsState() {
+    const entries = Object.entries(state.game.claims.rewardClaims || {});
+    let changed = false;
+    entries.forEach(([claimKey, claim]) => {
+      const normalized = normalizeRewardClaimRecord(claim, claimKey);
+      if (!normalized.changed) return;
+      state.game.claims.rewardClaims[claimKey] = normalized.claim;
+      changed = true;
+    });
+    return changed;
+  }
+
+  function logCapSnapshot(dateKey, reason, actionId = null) {
+    const caps = getDailyCaps(state.game.level);
+    const totals = getDailyRewardTotals(dateKey);
+    logEvent("CAP_RECALCULATED", {
+      reason,
+      actionId,
+      dateKey,
+      totalXpGranted: totals.xp,
+      totalGoldGranted: totals.gold,
+      xpRemaining: Math.max(0, caps.capXpPerDay - totals.xp),
+      goldRemaining: Math.max(0, caps.capGoldPerDay - totals.gold),
+      capXpPerDay: caps.capXpPerDay,
+      capGoldPerDay: caps.capGoldPerDay,
+    });
   }
 
   function getDailyCaps(level) {
@@ -1464,6 +1528,10 @@
         goldGranted: goldGain,
       };
 
+      const normalizedNewClaim = normalizeRewardClaimRecord(state.game.claims.rewardClaims[claimKey], claimKey);
+      if (normalizedNewClaim.changed) {
+        state.game.claims.rewardClaims[claimKey] = normalizedNewClaim.claim;
+      }
       applyDelta(xpGain, goldGain);
       logEvent("CLAIM", {
         actionId,
@@ -1487,6 +1555,7 @@
           capGoldPerDay: reward.meta.capGoldPerDay,
         });
       }
+      logCapSnapshot(dateKey, "claim", actionId);
 
       return {
         applied: true,
@@ -1500,8 +1569,13 @@
       return { applied: false, xpDelta: 0, goldDelta: 0, reason: "missing_claim" };
     }
 
-    const xpRollback = Math.max(0, Number(existingClaim.xpGranted ?? existingClaim.xp) || 0);
-    const goldRollback = Math.max(0, Number(existingClaim.goldGranted ?? existingClaim.gold) || 0);
+    const normalizedExisting = normalizeRewardClaimRecord(existingClaim, claimKey);
+    if (normalizedExisting.changed) {
+      state.game.claims.rewardClaims[claimKey] = normalizedExisting.claim;
+    }
+
+    const xpRollback = getClaimGrantedValue(state.game.claims.rewardClaims[claimKey], "xp");
+    const goldRollback = getClaimGrantedValue(state.game.claims.rewardClaims[claimKey], "gold");
     applyDelta(-xpRollback, -goldRollback);
     delete state.game.claims.rewardClaims[claimKey];
     logEvent("ROLLBACK", { actionId, dateKey, xpDelta: -xpRollback, goldDelta: -goldRollback });
@@ -1509,6 +1583,7 @@
     if (xpRollback > 0 || goldRollback > 0) {
       logEvent("ROLLBACK_PARTIAL", { actionId, dateKey, xpRolledBack: xpRollback, goldRolledBack: goldRollback });
     }
+    logCapSnapshot(dateKey, "rollback", actionId);
 
     return { applied: true, xpDelta: -xpRollback, goldDelta: -goldRollback, reason: "rolled_back" };
   }
