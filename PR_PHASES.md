@@ -154,3 +154,67 @@
 - [x] Save then reopen in edit: effort and preview stay consistent.
 - [x] Open/close editor repeatedly + tab navigation + reopen: preview still updates, no listener stacking symptoms.
 - [x] Console: 0 error during smoke run.
+
+## Phase 1 — Audit + Diagnostic (PROG-FIX-01)
+### What changed (Phase 1)
+- Audited progression wiring in `game.js`: bars were reading persisted cycle fields (`weekly.score`, `weekly.bossHp`, `monthly.points`, yearly relics) that are only updated on day close (`finalizePreviousDay`), not on each quest action.
+- Added internal progress sanity guards (`toSafeProgressNumber`, `toSafeProgressPercent`) to prevent NaN/invalid percentages and clamp progress in [0..100].
+- Added a single advanced-mode-only debug snapshot log at load with `{ weeklyScore, weeklyBossProgress, monthlyPoints, yearlyRelics }`.
+
+Cause réelle du bug:
+- Les barres Semaine/Boss/Mois/Année lisaient uniquement les compteurs persistés de fin de journée.
+- Pendant la journée, ces compteurs ne changent pas à chaque Terminer/Annuler, donc l’UI restait à 0.
+
+### Manual Tests (Phase 1)
+- [ ] Ouvrir l’app: aucune erreur console.
+- [ ] Terminer puis Annuler une quête: aucune erreur console.
+
+### Done criteria met
+- yes
+
+## Phase 2 — Derived Progress Engine fiable (PROG-FIX-02)
+### What changed (Phase 2)
+- Added a centralized derived engine `computeProgress(state, activeDateKey)` in `game.js`.
+- `computeProgress` now returns `{ day, week, weekChest, weekBossGate, weekDays, boss, month, year, meta }` with `value/max/percent/label/subLabel` per block.
+- Added robust fallbacks for old/incomplete state keys and strict sanitization (`toSafeProgressNumber`, `toSafeProgressPercent`, `buildProgressMetric`) so no NaN and clamped percentages.
+- Added advanced-mode debug trace on each Terminer/Annuler (`[HabitHub] progress derived`) to verify live derived changes.
+
+### Manual Tests (Phase 2)
+- [ ] Terminer 1 quête: objectivesDoneToday augmente et la dérivée jour bouge.
+- [ ] Terminer 3-5 quêtes: weeklyScore / boss / month dérivés > 0 (console debug advanced mode).
+- [ ] Refresh page: dérivées cohérentes avec l’état sauvegardé.
+
+### Done criteria met
+- yes
+
+## Phase 3 — Wiring UI (PROG-FIX-03)
+### What changed (Phase 3)
+- Wired Today + Progression bars to `computeProgress(...)` so Week/Boss/Month/Year now read live derived values instead of stale persisted-only counters.
+- Replaced obsolete reads of dead/stale fields in progression rendering paths.
+- Updated progress bar renderer to support `max = 0` safely (`allowZeroMax`) with UI fallback `—` and a 0% fill, never NaN.
+
+### Manual Tests (Phase 3)
+- [ ] Terminer 1 quête: barre Jour bouge + au moins une barre Semaine/Boss/Mois bouge.
+- [ ] Annuler la même quête: rollback visuel propre des barres.
+- [ ] Refresh: barres cohérentes avec la sauvegarde.
+
+### Done criteria met
+- yes
+
+## Phase 4 — Hardening + Non-régression (PROG-FIX-04)
+### What changed (Phase 4)
+- Hardened derived cycle math with anti-bug guardrails:
+  - negative values clamped to 0,
+  - boss damage projection clamped within `[0..bossHPmax]`,
+  - `daysValidated7` clamped to `[0..7]`.
+- Kept progression derivation aligned with reward claim rules (distinct reward claims source), preventing double-counting inconsistencies.
+- Added coherent weekly chest sublabel when chest is already claimed, including rollback-friendly messaging.
+- Kept debug logs restricted to advanced mode only.
+
+### Manual Tests (Phase 4)
+- [ ] Changer de date (debug date): transitions semaine/mois/année restent cohérentes.
+- [ ] Valider 2 jours: `daysValidated7` augmente sans dépasser 7.
+- [ ] Console: aucune erreur/warn durant Terminer/Annuler + refresh.
+
+### Done criteria met
+- yes

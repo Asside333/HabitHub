@@ -1035,6 +1035,19 @@
     return Math.min(Math.max(value, min), max);
   }
 
+  function toSafeProgressNumber(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(0, numeric);
+  }
+
+  function toSafeProgressPercent(value, max) {
+    const safeValue = toSafeProgressNumber(value);
+    const safeMax = toSafeProgressNumber(max);
+    if (safeMax <= 0) return 0;
+    return clamp((safeValue / safeMax) * 100, 0, 100);
+  }
+
   function getProgressPalette(variant, ratio) {
     const safeRatio = clamp(Number(ratio) || 0, 0, 1);
     if (variant === "risk") {
@@ -1054,9 +1067,10 @@
 
   function renderProgressBar(options) {
     const config = options && typeof options === "object" ? options : {};
-    const value = Math.max(0, Number(config.value) || 0);
-    const max = Math.max(1, Number(config.max) || 1);
-    const ratio = clamp(value / max, 0, 1);
+    const value = toSafeProgressNumber(config.value);
+    const allowZeroMax = config.allowZeroMax === true;
+    const max = allowZeroMax ? Math.floor(toSafeProgressNumber(config.max)) : Math.max(1, Math.floor(toSafeProgressNumber(config.max)));
+    const ratio = max > 0 ? clamp(toSafeProgressPercent(value, max) / 100, 0, 1) : 0;
     const variant = ["reward", "risk", "neutral"].includes(config.variant) ? config.variant : "neutral";
     const palette = getProgressPalette(variant, ratio);
     const label = typeof config.label === "string" ? config.label : "Progression";
@@ -1066,8 +1080,13 @@
     const sublabel = typeof config.sublabel === "string" && config.sublabel.trim() ? config.sublabel.trim() : "";
     const safeValue = Math.floor(value);
     const safeMax = Math.floor(max);
-    const numbers = showNumbers ? `${safeValue} / ${safeMax}${showPercent ? ` • ${percent}%` : ""}` : `${percent}%`;
-    const ariaText = `${label} ${safeValue} sur ${safeMax}${showPercent ? ` (${percent}%)` : ""}`;
+    const hasValidScale = safeMax > 0;
+    const numbers = showNumbers
+      ? (hasValidScale ? `${safeValue} / ${safeMax}${showPercent ? ` • ${percent}%` : ""}` : "—")
+      : `${percent}%`;
+    const ariaText = hasValidScale
+      ? `${label} ${safeValue} sur ${safeMax}${showPercent ? ` (${percent}%)` : ""}`
+      : `${label} échelle indisponible`;
 
     const classes = ["pbar", `pbar--${variant}`, `is-${palette.bucket}`];
     if (variant === "reward" && ratio >= 0.65) classes.push("pbar--goal-gradient");
@@ -1979,6 +1998,7 @@
     }
 
     ensureDailyProgressState();
+    debugDerivedProgress(completed ? "toggle:rollback" : "toggle:claim");
     storage.saveState(state.game);
     renderForActiveTab();
     highlightCatalogCard(questId);
@@ -2123,27 +2143,20 @@
     ui.refs.sessionTrack.setAttribute("aria-valuenow", String(completedVisible));
     ui.refs.sessionTrack.setAttribute("aria-valuemax", String(visibleQuests.length));
 
-    const dailyState = ensureDailyProgressState();
+    ensureDailyProgressState();
     ui.refs.streakStatus.textContent = `Streak: ${state.game.progress.streak} jour(s)`;
     ui.refs.streakProtections.textContent = `Shield: ${state.game.progress.streakShield}/1 • Rest cette semaine: ${Math.max(0, Number(state.game.progress.restDaysUsedByWeek[getWeekKey(getActiveDateIso())]) || 0)}/${Math.max(0, Number(PROGRESSION_CONFIG.streakRules?.restDayRules?.maxPerWeek) || 0)} • Vacances restantes: ${state.game.progress.vacationDaysRemaining}`;
 
+    const progress = computeProgress(state.game, getActiveDateIso());
     const weekly = state.game.cycles.weekly;
-    const chestTier = getWeeklyChestTier(weekly.score);
-    const dailyTiers = PROGRESSION_CONFIG.dailyTiers || {};
-    const silverMin = Math.max(1, Number(dailyTiers.silver?.minObjectives) || 1);
-    const goldMin = Math.max(silverMin, Number(dailyTiers.gold?.minObjectives) || silverMin);
-    const nextTierMin = dailyState.tier === "none" ? Math.max(1, Number(dailyTiers.bronze?.minObjectives) || 1) : (dailyState.tier === "bronze" ? silverMin : goldMin);
-    const dayTarget = dailyState.tier === "gold" ? Math.max(goldMin, dailyState.objectivesCompleted) : nextTierMin;
-    const daySublabel = dailyState.tier === "gold"
-      ? "Or atteint"
-      : `Prochain palier: ${dailyState.tier === "none" ? "Bronze" : (dailyState.tier === "bronze" ? "Argent" : "Or")}`;
+    const chestTier = getWeeklyChestTier(progress.week.value);
     renderProgressBar({
       id: "today-progress-day-bar",
       label: "Jour",
-      value: dailyState.objectivesCompleted,
-      max: dayTarget,
+      value: progress.day.value,
+      max: progress.day.max,
       variant: "reward",
-      sublabel: daySublabel,
+      sublabel: progress.day.subLabel,
       showPercent: true,
       showNumbers: true,
     });
@@ -2154,21 +2167,19 @@
     renderProgressBar({
       id: "today-progress-week-bar",
       label: "Semaine",
-      value: Math.max(0, weekly.score),
-      max: weeklyMotivatingTarget,
+      value: progress.week.value,
+      max: Math.max(weeklyMotivatingTarget, progress.week.max),
       variant: "reward",
-      sublabel: chestTier ? `Coffre: ${chestTier.id}${weekly.chestClaimed ? " (claim)" : ""}` : "Objectif hebdo",
+      sublabel: progress.week.subLabel,
       showPercent: true,
       showNumbers: true,
     });
 
-    const bossGoal = Math.max(1, Number(weekly.bossMaxHp) || 1);
-    const bossProgress = Math.max(0, bossGoal - Math.max(0, Number(weekly.bossHp) || 0));
     renderProgressBar({
       id: "today-progress-boss-bar",
       label: "Boss",
-      value: bossProgress,
-      max: bossGoal,
+      value: progress.boss.value,
+      max: progress.boss.max,
       variant: "reward",
       sublabel: `Streak boss: ${state.game.cycles.bossStreak}`,
       showPercent: true,
@@ -2185,9 +2196,7 @@
 
   function renderProgressionTab() {
     const dailyState = ensureDailyProgressState();
-    const weekly = state.game.cycles.weekly;
-    const chestTiers = Array.isArray(PROGRESSION_CONFIG.weeklyRules?.chestTiers) ? PROGRESSION_CONFIG.weeklyRules.chestTiers : [];
-    const maxChestScore = chestTiers.reduce((max, tier) => Math.max(max, Number(tier?.minScore) || 0), 0);
+    const progress = computeProgress(state.game, getActiveDateIso());
     const dailyTotals = getDailyRewardTotals(getActiveDateIso());
     const dailyCaps = getDailyCaps(state.game.level);
     const bronzeMin = Math.max(1, Number(PROGRESSION_CONFIG.dailyTiers?.bronze?.minObjectives) || 1);
@@ -2219,48 +2228,42 @@
     renderProgressBar({
       id: "progression-week-chest-bar",
       label: "Score hebdo / coffre max",
-      value: Math.max(0, weekly.score),
-      max: Math.max(1, maxChestScore),
+      value: progress.weekChest.value,
+      max: progress.weekChest.max,
       variant: "reward",
-      sublabel: "Objectif coffre",
+      sublabel: progress.weekChest.subLabel,
       showPercent: true,
       showNumbers: true,
     });
-    if (Number(weekly.bossMaxHp) > 0) {
-      renderProgressBar({
-        id: "progression-week-boss-threshold-bar",
-        label: "Score hebdo / seuil boss",
-        value: Math.max(0, weekly.score),
-        max: Math.max(1, Number(weekly.bossMaxHp) || 1),
-        variant: "reward",
-        sublabel: "Rythme pour le boss",
-        showPercent: true,
-        showNumbers: true,
-      });
-    } else {
-      const host = document.getElementById("progression-week-boss-threshold-bar");
-      if (host) host.innerHTML = '<p class="progress-subtext">À activer bientôt</p>';
-    }
+    renderProgressBar({
+      id: "progression-week-boss-threshold-bar",
+      label: "Score hebdo / seuil boss",
+      value: progress.weekBossGate.value,
+      max: progress.weekBossGate.max,
+      variant: "reward",
+      sublabel: progress.weekBossGate.subLabel,
+      showPercent: true,
+      showNumbers: true,
+      allowZeroMax: true,
+    });
     renderProgressBar({
       id: "progression-week-days-bar",
       label: "Jours validés",
-      value: Object.keys(weekly.days || {}).length,
-      max: 7,
+      value: progress.weekDays.value,
+      max: progress.weekDays.max,
       variant: "reward",
-      sublabel: "Sur 7 jours",
+      sublabel: progress.weekDays.subLabel,
       showPercent: true,
       showNumbers: true,
     });
 
-    const bossGoal = Math.max(1, Number(weekly.bossMaxHp) || 1);
-    const bossProgress = Math.max(0, bossGoal - Math.max(0, Number(weekly.bossHp) || 0));
     renderProgressBar({
       id: "progression-boss-main-bar",
       label: "Boss hebdo",
-      value: bossProgress,
-      max: bossGoal,
+      value: progress.boss.value,
+      max: progress.boss.max,
       variant: "reward",
-      sublabel: weekly.bossDefeated ? "Boss vaincu" : "Dégâts cumulés",
+      sublabel: progress.boss.subLabel,
       showPercent: true,
       showNumbers: true,
     });
@@ -2268,29 +2271,24 @@
       ui.refs.progressionBossStreak.textContent = `Streak boss: ${state.game.cycles.bossStreak}`;
     }
 
-    const badges = Array.isArray(PROGRESSION_CONFIG.monthlyRules?.badgeThresholds) ? PROGRESSION_CONFIG.monthlyRules.badgeThresholds : [];
-    const monthTarget = badges.reduce((max, badge) => Math.max(max, Number(badge?.minPoints) || 0), 0);
-    const monthBadge = state.game.cycles.monthly.badgeId;
     renderProgressBar({
       id: "progression-month-bar",
       label: "Points du mois",
-      value: Math.max(0, state.game.cycles.monthly.points),
-      max: Math.max(1, monthTarget),
+      value: progress.month.value,
+      max: progress.month.max,
       variant: "reward",
-      sublabel: monthBadge ? `Badge obtenu: ${monthBadge}` : "Badge à débloquer",
+      sublabel: progress.month.subLabel,
       showPercent: true,
       showNumbers: true,
     });
 
-    const relicGoal = 12;
-    const relicCount = Array.isArray(state.game.cycles.yearly.relicsUnlocked) ? state.game.cycles.yearly.relicsUnlocked.length : 0;
     renderProgressBar({
       id: "progression-year-bar",
       label: "Reliques annuelles",
-      value: relicCount,
-      max: relicGoal,
+      value: progress.year.value,
+      max: progress.year.max,
       variant: "reward",
-      sublabel: "Milestones: 6 / 10 / 12",
+      sublabel: progress.year.subLabel,
       showPercent: true,
       showNumbers: true,
     });
@@ -2385,6 +2383,175 @@
     ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
     ui.refs.devTechInfo.textContent = `Clé save: ${storage.keys.save} • Schéma: v${state.game.v}`;
     renderInstallUi();
+  }
+
+  function getProgressDebugSnapshot() {
+    const weekly = state.game.cycles?.weekly || {};
+    const weeklyScore = Math.floor(toSafeProgressNumber(weekly.score));
+    const bossGoal = Math.max(1, Math.floor(toSafeProgressNumber(weekly.bossMaxHp)));
+    const bossHp = Math.floor(toSafeProgressNumber(weekly.bossHp));
+    const weeklyBossProgress = Math.max(0, bossGoal - bossHp);
+    const monthlyPoints = Math.floor(toSafeProgressNumber(state.game.cycles?.monthly?.points));
+    const yearlyRelics = Array.isArray(state.game.cycles?.yearly?.relicsUnlocked)
+      ? state.game.cycles.yearly.relicsUnlocked.length
+      : 0;
+    return { weeklyScore, weeklyBossProgress, monthlyPoints, yearlyRelics };
+  }
+
+  function debugProgressSnapshotOnLoad() {
+    if (!state.settings.advancedModeEnabled) return;
+    console.debug("[HabitHub] progress snapshot", getProgressDebugSnapshot());
+  }
+
+  function debugDerivedProgress(contextLabel) {
+    if (!state.settings.advancedModeEnabled) return;
+    const computed = computeProgress(state.game, getActiveDateIso());
+    console.debug("[HabitHub] progress derived", {
+      context: contextLabel,
+      weeklyScore: computed.meta.weeklyScore,
+      weeklyBossProgress: computed.meta.weeklyBossProgress,
+      monthlyPoints: computed.meta.monthlyPoints,
+      yearlyRelics: computed.meta.yearlyRelics,
+    });
+  }
+
+  function buildProgressMetric({ value, max, label, subLabel = "", allowZeroMax = false }) {
+    const safeValue = Math.floor(toSafeProgressNumber(value));
+    const rawMax = Math.floor(toSafeProgressNumber(max));
+    const safeMax = allowZeroMax ? rawMax : Math.max(1, rawMax);
+    const percent = safeMax > 0 ? Math.round(toSafeProgressPercent(safeValue, safeMax)) : 0;
+    return {
+      value: safeValue,
+      max: safeMax,
+      percent,
+      label,
+      subLabel,
+      isMaxZero: safeMax <= 0,
+    };
+  }
+
+  function computeProgress(gameState, activeDateKey) {
+    const safeState = gameState && typeof gameState === "object" ? gameState : createInitialGameState();
+    const dateKey = typeof activeDateKey === "string" && activeDateKey ? activeDateKey : getActiveDateIso();
+
+    const weekly = safeState.cycles?.weekly && typeof safeState.cycles.weekly === "object"
+      ? safeState.cycles.weekly
+      : { days: {}, score: 0, bossMaxHp: 0, bossHp: 0, chestClaimed: false };
+    const daysMap = weekly.days && typeof weekly.days === "object" ? weekly.days : {};
+    const hasValidatedToday = typeof daysMap[dateKey] === "string";
+
+    const objectivesDoneToday = countDistinctDailyObjectives(dateKey);
+    const liveTier = computeTier(objectivesDoneToday);
+    const tierForProjection = hasValidatedToday ? daysMap[dateKey] : liveTier;
+    const tierPointsToday = Math.max(0, getTierPoints(tierForProjection));
+    const monthlyPointsToday = Math.max(0, Number(PROGRESSION_CONFIG.monthlyRules?.monthlyPoints?.[tierForProjection]) || 0);
+
+    const chestTiers = Array.isArray(PROGRESSION_CONFIG.weeklyRules?.chestTiers) ? PROGRESSION_CONFIG.weeklyRules.chestTiers : [];
+    const weeklyChestMax = chestTiers.reduce((maxScore, tier) => Math.max(maxScore, Number(tier?.minScore) || 0), 0);
+    const weeklyScoreBase = Math.floor(toSafeProgressNumber(weekly.score));
+    const weeklyScore = Math.max(0, weeklyScoreBase + (hasValidatedToday ? 0 : tierPointsToday));
+    const projectedChestTier = getWeeklyChestTier(weeklyScore);
+
+    const bossEnabled = PROGRESSION_CONFIG.weeklyRules?.bossRules?.enabled === true;
+    const bossMaxHp = Math.floor(toSafeProgressNumber(weekly.bossMaxHp));
+    const bossHpBase = Math.floor(toSafeProgressNumber(weekly.bossHp));
+    const bossDamageBase = Math.max(0, bossMaxHp - bossHpBase);
+    const projectedBossDamageRaw = bossEnabled && !hasValidatedToday && !weekly.bossDefeated
+      ? bossDamageBase + tierPointsToday
+      : bossDamageBase;
+    const projectedBossDamage = bossMaxHp > 0 ? clamp(projectedBossDamageRaw, 0, bossMaxHp) : 0;
+
+    const monthlyPointsBase = Math.floor(toSafeProgressNumber(safeState.cycles?.monthly?.points));
+    const monthlyPoints = Math.max(0, monthlyPointsBase + (hasValidatedToday ? 0 : monthlyPointsToday));
+    const badges = Array.isArray(PROGRESSION_CONFIG.monthlyRules?.badgeThresholds) ? PROGRESSION_CONFIG.monthlyRules.badgeThresholds : [];
+    const monthlyGoal = badges.reduce((maxPoints, badge) => Math.max(maxPoints, Number(badge?.minPoints) || 0), 0);
+    const projectedMonthBadge = badges.reduce((match, badge) => {
+      if (monthlyPoints >= (Number(badge?.minPoints) || 0)) return badge.id;
+      return match;
+    }, null);
+
+    const yearlyPointsBase = Math.floor(toSafeProgressNumber(safeState.cycles?.yearly?.points));
+    const yearlyPoints = Math.max(0, yearlyPointsBase + (hasValidatedToday ? 0 : monthlyPointsToday));
+    const yearlyRules = PROGRESSION_CONFIG.yearlyRules || {};
+    const relics = Array.isArray(yearlyRules.relics) ? yearlyRules.relics : [];
+    const relicUnlockEveryPoints = Math.max(1, Math.floor(Number(yearlyRules.relicUnlockEveryPoints) || 180));
+    const yearlyRelicsProjected = Math.min(relics.length, Math.floor(yearlyPoints / relicUnlockEveryPoints));
+    const yearlyMax = Math.max(1, Number(yearlyRules.relicsMax) || 12);
+
+    const dailyTiers = PROGRESSION_CONFIG.dailyTiers || {};
+    const bronzeMin = Math.max(1, Number(dailyTiers.bronze?.minObjectives) || 1);
+    const silverMin = Math.max(bronzeMin, Number(dailyTiers.silver?.minObjectives) || bronzeMin);
+    const goldMin = Math.max(silverMin, Number(dailyTiers.gold?.minObjectives) || silverMin);
+    const dayTarget = liveTier === "gold"
+      ? Math.max(goldMin, objectivesDoneToday)
+      : (liveTier === "silver" ? goldMin : (liveTier === "bronze" ? silverMin : bronzeMin));
+
+    const weeklyBossTarget = bossMaxHp;
+    const daysValidatedBase = Math.max(0, Object.keys(daysMap).length);
+    const daysValidated7 = clamp(daysValidatedBase + (!hasValidatedToday && liveTier !== "none" ? 1 : 0), 0, 7);
+
+    const weekSubLabel = weekly.chestClaimed
+      ? `Coffre récupéré${projectedChestTier ? ` (${projectedChestTier.id})` : ""}`
+      : (projectedChestTier ? `Coffre: ${projectedChestTier.id}` : "Objectif hebdo");
+
+    return {
+      day: buildProgressMetric({
+        value: objectivesDoneToday,
+        max: dayTarget,
+        label: "Jour",
+        subLabel: `Tier actuel: ${getTierLabel(liveTier)}`,
+      }),
+      week: buildProgressMetric({
+        value: weeklyScore,
+        max: Math.max(weeklyChestMax, bossMaxHp),
+        label: "Semaine",
+        subLabel: weekSubLabel,
+      }),
+      weekChest: buildProgressMetric({
+        value: weeklyScore,
+        max: weeklyChestMax,
+        label: "Score hebdo / coffre max",
+        subLabel: "Objectif coffre",
+      }),
+      weekBossGate: buildProgressMetric({
+        value: weeklyScore,
+        max: weeklyBossTarget,
+        label: "Score hebdo / seuil boss",
+        subLabel: "Rythme pour le boss",
+        allowZeroMax: true,
+      }),
+      weekDays: buildProgressMetric({
+        value: daysValidated7,
+        max: 7,
+        label: "Jours validés",
+        subLabel: "Sur 7 jours",
+      }),
+      boss: buildProgressMetric({
+        value: projectedBossDamage,
+        max: bossMaxHp,
+        label: "Boss",
+        subLabel: weekly.bossDefeated ? "Boss vaincu" : "Dégâts cumulés",
+      }),
+      month: buildProgressMetric({
+        value: monthlyPoints,
+        max: monthlyGoal,
+        label: "Points du mois",
+        subLabel: projectedMonthBadge ? `Badge obtenu: ${projectedMonthBadge}` : "Badge à débloquer",
+      }),
+      year: buildProgressMetric({
+        value: yearlyRelicsProjected,
+        max: yearlyMax,
+        label: "Reliques annuelles",
+        subLabel: "Milestones: 6 / 10 / 12",
+      }),
+      meta: {
+        objectivesDoneToday,
+        weeklyScore,
+        weeklyBossProgress: projectedBossDamage,
+        monthlyPoints,
+        yearlyRelics: yearlyRelicsProjected,
+      },
+    };
   }
 
   function getFilteredCatalog() {
@@ -3228,6 +3395,7 @@
     storage.saveSettings(state.settings);
     storage.saveState(state.game);
     renderAllTabs();
+    debugProgressSnapshotOnLoad();
     showOnboardingIfNeeded();
   }
 
