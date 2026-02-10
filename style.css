@@ -340,6 +340,15 @@ h1 {
 .stats {
   padding: var(--space-16);
 }
+
+.compact-progress {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.compact-progress .btn {
+  min-height: 44px;
+}
 .session-progress,
 
 .progress-accordion {
@@ -407,6 +416,81 @@ h1 {
   border-radius: inherit;
   background: linear-gradient(90deg, #52da70, #8df0a2);
   transition: width 260ms ease;
+}
+
+.pbar {
+  --bar-ratio: 0;
+  --bar-accent: #6aa9ff;
+  --bar-glow: rgba(121, 194, 255, 0.26);
+  --bar-track: rgba(134, 163, 236, 0.28);
+  display: grid;
+  gap: 0.35rem;
+}
+
+.pbar-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.pbar-label {
+  font-size: 0.84rem;
+  font-weight: 800;
+  color: #e6efff;
+}
+
+.pbar-sub {
+  font-size: 0.76rem;
+  color: #c2d6ff;
+  margin-left: 0.25rem;
+  font-weight: 700;
+}
+
+.pbar-numbers {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #f6f9ff;
+}
+
+.pbar-track {
+  width: 100%;
+  height: clamp(0.9rem, 2.5vw, 1.2rem);
+  border-radius: 999px;
+  background: var(--bar-track);
+  border: 1px solid rgba(218, 232, 255, 0.3);
+  overflow: hidden;
+}
+
+.pbar-fill {
+  width: calc(var(--bar-ratio) * 100%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bar-accent) 72%, #ffffff), var(--bar-accent));
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2);
+  transition: width 250ms ease, box-shadow 250ms ease, filter 250ms ease;
+}
+
+.pbar.pbar--reward { --bar-track: rgba(138, 154, 255, 0.26); }
+.pbar.pbar--risk { --bar-track: rgba(144, 178, 133, 0.25); }
+.pbar.pbar--neutral { --bar-track: rgba(141, 167, 209, 0.26); }
+
+.pbar.is-high .pbar-fill {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.24), 0 0 10px var(--bar-glow);
+}
+
+.pbar.pbar--glow.is-high .pbar-fill {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.24), 0 0 15px var(--bar-glow), 0 0 26px color-mix(in srgb, var(--bar-glow) 66%, transparent);
+}
+
+.pbar.pbar-pulse .pbar-fill {
+  animation: pbar-pulse 360ms ease;
+}
+
+@keyframes pbar-pulse {
+  0% { filter: brightness(1); transform: scaleY(1); }
+  50% { filter: brightness(1.14); transform: scaleY(1.03); }
+  100% { filter: brightness(1); transform: scaleY(1); }
 }
 
 .level-progress-secondary .level-progress-fill {
@@ -893,8 +977,15 @@ body.reduce-motion .xp-shine {
 }
 
 body.reduce-motion .progress-fill,
-body.reduce-motion .xp-hero-fill {
+body.reduce-motion .xp-hero-fill,
+body.reduce-motion .pbar-fill {
   transition: none !important;
+}
+
+body.reduce-motion .pbar-pulse .pbar-fill,
+body.reduce-motion .pbar--glow .pbar-fill {
+  animation: none !important;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -917,8 +1008,27 @@ body.reduce-motion .xp-hero-fill {
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-8);
+}
+
+.progression-dashboard {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.progression-section {
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  background: rgba(16, 37, 87, 0.72);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.progression-section h3 {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .tab-btn {

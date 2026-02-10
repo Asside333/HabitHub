@@ -17,6 +17,10 @@
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="2" fill="none"/></svg></span>
           <span class="nav-label">Catalogue</span>
         </button>
+        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="progression" aria-controls="tab-progression">
+          <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4z"/><path d="M7 16V9h2v7zm4 0V6h2v10zm4 0v-4h2v4z"/></svg></span>
+          <span class="nav-label">Progression</span>
+        </button>
         <button type="button" class="btn btn-ghost tab-btn" data-tab-target="settings" aria-controls="tab-settings">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z"/><path d="m20 13.2-1.6.5a6.7 6.7 0 0 1-.4 1l.9 1.4-1.8 1.8-1.4-.9a6.7 6.7 0 0 1-1 .4L13.2 20h-2.4l-.5-1.6a6.7 6.7 0 0 1-1-.4l-1.4.9-1.8-1.8.9-1.4a6.7 6.7 0 0 1-.4-1L4 13.2v-2.4l1.6-.5a6.7 6.7 0 0 1 .4-1L5 7.9l1.8-1.8 1.4.9a6.7 6.7 0 0 1 1-.4L10.8 4h2.4l.5 1.6a6.7 6.7 0 0 1 1 .4l1.4-.9L18 7.9l-.9 1.4a6.7 6.7 0 0 1 .4 1l1.6.5z"/></svg></span>
           <span class="nav-label">Réglages</span>
@@ -63,34 +67,15 @@
             <ul id="quests-list" class="quests-list"></ul>
           </section>
 
-          <section class="card stats" aria-labelledby="stats-title">
+          <section class="card stats compact-progress" aria-labelledby="stats-title">
             <div class="stats-head">
-              <h2 id="stats-title">Progression</h2>
+              <h2 id="stats-title">Résumé progression</h2>
             </div>
-            <section class="progress-accordion" aria-live="polite">
-              <details class="progress-card">
-                <summary>Jour</summary>
-                <div class="progress-card-body">
-                  <div class="progress-label-row"><p class="label">Paliers du jour</p><strong id="daily-tier-status">Bronze dès 1</strong></div>
-                  <p id="daily-tier-rule" class="progress-subtext">Argent dès 3 objectifs • Or dès 5 objectifs</p>
-                  <p id="streak-protections" class="progress-subtext">Shield: 1/1 • Rest cette semaine: 0/1 • Vacances restantes: 14</p>
-                </div>
-              </details>
-              <details class="progress-card">
-                <summary>Semaine</summary>
-                <div class="progress-card-body">
-                  <div class="progress-label-row"><p class="label">Progression hebdo</p><strong id="weekly-score-status">Score hebdo: 0</strong></div>
-                  <p id="monthly-yearly-status" class="progress-subtext">Badge: - • Reliques: 0 • Milestones: 0</p>
-                  <button id="claim-weekly-chest-btn" class="btn btn-success" type="button">Claim coffre hebdo</button>
-                </div>
-              </details>
-              <details class="progress-card">
-                <summary>Boss</summary>
-                <div class="progress-card-body">
-                  <p id="weekly-boss-status" class="progress-subtext">Boss: 0 / 0 • Streak boss: 0</p>
-                </div>
-              </details>
-            </section>
+            <p id="streak-protections" class="progress-subtext">Shield: 1/1 • Rest cette semaine: 0/1 • Vacances restantes: 14</p>
+            <div id="today-progress-day-bar"></div>
+            <div id="today-progress-week-bar"></div>
+            <div id="today-progress-boss-bar"></div>
+            <button id="claim-weekly-chest-btn" class="btn btn-success" type="button">Claim coffre hebdo</button>
 
             <div class="level-progress level-progress-secondary" aria-live="polite">
               <div class="progress-label-row"><p class="label">Niveau suivant</p><strong id="level-progress-text">XP: 0 / 0</strong></div>
@@ -99,6 +84,47 @@
             </div>
           </section>
         </div>
+      </section>
+
+      <section id="tab-progression" data-tab-panel="progression" hidden>
+        <section class="card progression-dashboard" aria-labelledby="progression-dashboard-title">
+          <h2 id="progression-dashboard-title">Progression complète</h2>
+
+          <article class="progression-section">
+            <h3>Jour</h3>
+            <p class="progress-subtext">Vue des paliers quotidiens et du cap XP.</p>
+            <div id="progression-day-tier-bar"></div>
+            <div id="progression-day-cap-bar"></div>
+          </article>
+
+          <article class="progression-section">
+            <h3>Semaine</h3>
+            <p class="progress-subtext">Score hebdo vers coffre, boss et rythme de validation.</p>
+            <div id="progression-week-chest-bar"></div>
+            <div id="progression-week-boss-threshold-bar"></div>
+            <div id="progression-week-days-bar"></div>
+          </article>
+
+          <article class="progression-section">
+            <h3>Boss</h3>
+            <p class="progress-subtext">Progression du boss hebdomadaire.</p>
+            <div id="progression-boss-main-bar"></div>
+            <p id="progression-boss-streak" class="progress-subtext">Streak boss: 0</p>
+          </article>
+
+          <article class="progression-section">
+            <h3>Mois</h3>
+            <p class="progress-subtext">Points mensuels vers badge.</p>
+            <div id="progression-month-bar"></div>
+          </article>
+
+          <article class="progression-section">
+            <h3>Année</h3>
+            <p class="progress-subtext">Reliques et milestones annuels.</p>
+            <div id="progression-year-bar"></div>
+            <p id="progression-year-milestones" class="progress-subtext">Milestones: -</p>
+          </article>
+        </section>
       </section>
 
       <section id="tab-catalogue" data-tab-panel="catalogue" hidden>
