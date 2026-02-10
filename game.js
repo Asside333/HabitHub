@@ -556,6 +556,13 @@
         economyGoldCapRange: document.getElementById("economy-gold-cap-range"),
         economyGoldCapValue: document.getElementById("economy-gold-cap-value"),
         economyPresetButtons: Array.from(document.querySelectorAll("[data-economy-preset]")),
+        economyAuditStatus: document.getElementById("economy-audit-status"),
+        economyAuditPotentialXp: document.getElementById("economy-audit-potential-xp"),
+        economyAuditMaxXp: document.getElementById("economy-audit-max-xp"),
+        economyAuditLevelTime: document.getElementById("economy-audit-level-time"),
+        economyAuditSource: document.getElementById("economy-audit-source"),
+        economyAuditRecommendBtn: document.getElementById("economy-audit-recommend-btn"),
+        economyAuditRecommendText: document.getElementById("economy-audit-recommend-text"),
         goldStatCard: document.getElementById("gold-stat-card"),
         goldSortOption: document.getElementById("sort-gold-desc-option"),
         catalogList: document.getElementById("catalog-list"),
@@ -960,6 +967,97 @@
     const capGoldPerDayRaw = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase ?? fallbackCaps.capGoldPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapPerLevel) || 0)) * levelOffset));
     const capGoldPerDay = isGoldEnabled() ? capGoldPerDayRaw : 0;
     return { capXpPerDay, capGoldPerDay };
+  }
+
+  function getDateKeyOffsetFromActive(offsetDays) {
+    const safeOffset = Math.max(0, Math.floor(Number(offsetDays) || 0));
+    const date = new Date(`${getActiveDateIso()}T00:00:00`);
+    date.setDate(date.getDate() - safeOffset);
+    return toIsoDate(date);
+  }
+
+  function getRecentDailyXpAverage(daysWindow = 7) {
+    const safeWindow = Math.max(1, Math.floor(Number(daysWindow) || 7));
+    const totals = [];
+    for (let index = 0; index < safeWindow; index += 1) {
+      const dayKey = getDateKeyOffsetFromActive(index);
+      totals.push(getDailyRewardTotals(dayKey).xp);
+    }
+    const activeDays = totals.filter((xp) => xp > 0);
+    if (!activeDays.length) {
+      return { averageXp: 0, activeDays: 0, windowDays: safeWindow };
+    }
+    const averageXp = activeDays.reduce((sum, xp) => sum + xp, 0) / activeDays.length;
+    return { averageXp, activeDays: activeDays.length, windowDays: safeWindow };
+  }
+
+  function computeEconomyAudit() {
+    const visibleQuests = catalog.getVisibleQuests();
+    const potentialXp = visibleQuests.reduce((sum, quest) => sum + getRewardPreviewFromEffort(quest).xp, 0);
+    const todayKey = getActiveDateIso();
+    const todayTotals = getDailyRewardTotals(todayKey);
+    const dailyCaps = getDailyCaps(state.game.level);
+    const xpRemainingFromCap = Math.max(0, dailyCaps.capXpPerDay - todayTotals.xp);
+    const maxXpToday = Math.max(0, Math.min(potentialXp, xpRemainingFromCap));
+
+    const levelProgress = computeLevelProgressAtLevel(state.game.totalXp, state.game.level);
+    const xpRemainingForLevel = Math.max(0, levelProgress.xpRemaining);
+    const rollingAverage = getRecentDailyXpAverage(7);
+    const dailyXpUsed = rollingAverage.activeDays > 0 ? rollingAverage.averageXp : Math.max(0, dailyCaps.capXpPerDay);
+    const sourceLabel = rollingAverage.activeDays > 0
+      ? `Base estimation : moyenne ${rollingAverage.activeDays}/${rollingAverage.windowDays} jours actifs`
+      : "Base estimation : cap XP/jour";
+
+    const daysToLevel = dailyXpUsed > 0 ? xpRemainingForLevel / dailyXpUsed : Number.POSITIVE_INFINITY;
+    const stableRange = ECONOMY_CONFIG.economyAudit?.stableDaysToLevel || {};
+    const minDays = Math.max(1, Number(stableRange.min) || 5);
+    const maxDays = Math.max(minDays, Number(stableRange.max) || 14);
+
+    let status = "stable";
+    let statusText = "Vert • progression stable";
+    if (Number.isFinite(daysToLevel) && daysToLevel < minDays) {
+      status = "too_fast";
+      statusText = "Orange • progression trop rapide";
+    }
+    if (!Number.isFinite(daysToLevel) || daysToLevel > maxDays) {
+      status = "too_slow";
+      statusText = "Orange • progression trop lente";
+    }
+
+    return {
+      potentialXp,
+      maxXpToday,
+      daysToLevel,
+      sourceLabel,
+      status,
+      statusText,
+      xpRemainingForLevel,
+      capXpPerDay: dailyCaps.capXpPerDay,
+    };
+  }
+
+  function computeEconomyAuditRecommendation(audit) {
+    const recommendation = ECONOMY_CONFIG.economyAudit?.recommendation || {};
+    const capRanges = getEconomyCapRanges();
+    const targetDays = Math.max(1, Number(recommendation.targetDaysToLevel) || 9);
+    const roundTo = Math.max(1, Number(recommendation.roundTo) || capRanges.xp.step || 5);
+    const tooFastMultiplier = Math.max(0.1, Number(recommendation.tooFastMultiplier) || 0.8);
+    const tooSlowMultiplier = Math.max(0.1, Number(recommendation.tooSlowMultiplier) || 1.2);
+
+    let suggested = audit.capXpPerDay;
+    if (audit.status === "too_fast") suggested = Math.floor(audit.capXpPerDay * tooFastMultiplier);
+    if (audit.status === "too_slow") suggested = Math.ceil(audit.capXpPerDay * tooSlowMultiplier);
+
+    const targetFromLevel = targetDays > 0 ? Math.ceil(Math.max(0, audit.xpRemainingForLevel) / targetDays) : audit.capXpPerDay;
+    suggested = Math.max(suggested, targetFromLevel);
+    suggested = Math.round(suggested / roundTo) * roundTo;
+    suggested = clamp(suggested, capRanges.xp.min, capRanges.xp.max);
+
+    return {
+      suggestedCapXp: suggested,
+      targetDays,
+      roundTo,
+    };
   }
 
   function applyDailyCaps(dateKey, xpWanted, goldWanted, level) {
@@ -1624,6 +1722,20 @@
   }
 
 
+  function renderEconomyAuditSection() {
+    if (!ui.refs.economyAuditStatus) return;
+    const audit = computeEconomyAudit();
+    ui.refs.economyAuditPotentialXp.textContent = `${Math.floor(audit.potentialXp)} XP`;
+    ui.refs.economyAuditMaxXp.textContent = `${Math.floor(audit.maxXpToday)} XP`;
+    ui.refs.economyAuditLevelTime.textContent = Number.isFinite(audit.daysToLevel)
+      ? `${Math.max(0.1, audit.daysToLevel).toFixed(1)} jour(s)`
+      : "∞ (aucun gain XP)";
+    ui.refs.economyAuditSource.textContent = audit.sourceLabel;
+    ui.refs.economyAuditStatus.textContent = audit.statusText;
+    ui.refs.economyAuditStatus.classList.toggle("audit-indicator-stable", audit.status === "stable");
+    ui.refs.economyAuditStatus.classList.toggle("audit-indicator-warning", audit.status !== "stable");
+  }
+
   function renderSettingsTab() {
     ui.refs.hapticsToggleState.textContent = state.settings.hapticsEnabled ? "ON" : "OFF";
     ui.refs.hapticsToggle.checked = state.settings.hapticsEnabled;
@@ -1659,6 +1771,8 @@
       button.classList.toggle("is-active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
+
+    renderEconomyAuditSection();
 
     ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
     ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
@@ -2008,6 +2122,7 @@
       state.settings.economyOverrides.dailyXpCapBase = next;
       applyEconomySettingsToConfig(state.settings);
       storage.saveSettings(state.settings);
+      renderEconomyAuditSection();
     });
 
     ui.refs.economyGoldCapRange.addEventListener("input", () => {
@@ -2037,6 +2152,14 @@
         renderCreateTab();
         ui.showToast("success", "Économie", `Preset ${getPresetLabel(presetKey)} appliqué.`);
       });
+    });
+
+    ui.refs.economyAuditRecommendBtn?.addEventListener("click", () => {
+      const audit = computeEconomyAudit();
+      const suggestion = computeEconomyAuditRecommendation(audit);
+      if (!ui.refs.economyAuditRecommendText) return;
+      ui.refs.economyAuditRecommendText.textContent = `Suggestion de cap: ${suggestion.suggestedCapXp} XP/jour (objectif ~${suggestion.targetDays} jours / niveau)`;
+      ui.showToast("info", "Audit économie", `Suggestion: ${suggestion.suggestedCapXp} XP/jour (non appliqué).`);
     });
 
     ui.refs.developerModeToggle.addEventListener("change", () => {
