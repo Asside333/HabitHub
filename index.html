@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#123886" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <title>HabitHub — MVP offline</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -64,21 +66,15 @@
             <button id="today-open-progression-btn" class="btn btn-ghost" type="button">Voir progression</button>
           </section>
 
-          <section class="card stats compact-progress" aria-labelledby="stats-title" hidden>
+          <section class="card stats compact-progress" aria-labelledby="stats-title">
             <div class="stats-head">
               <h2 id="stats-title">Résumé progression</h2>
+              <button id="today-open-progression-inline-btn" class="btn btn-ghost btn-sm" type="button">Ouvrir Progression</button>
             </div>
-            <p id="streak-protections" class="progress-subtext">Shield: 1/1 • Rest cette semaine: 0/1 • Vacances restantes: 14</p>
+            <p id="streak-protections" class="progress-subtext">Streak protections: -</p>
             <div id="today-progress-day-bar"></div>
             <div id="today-progress-week-bar"></div>
             <div id="today-progress-boss-bar"></div>
-            <button id="claim-weekly-chest-btn" class="btn btn-success" type="button">Claim coffre hebdo</button>
-
-            <div class="level-progress level-progress-secondary" aria-live="polite">
-              <div class="progress-label-row"><p class="label">Niveau suivant</p><strong id="level-progress-text">XP du niveau : 0 / 0</strong></div>
-              <div class="progress-track" id="level-progress-track" role="progressbar"><div id="level-progress-bar" class="progress-fill level-progress-fill"></div></div>
-              <p id="level-progress-remaining" class="progress-subtext">Reste: 0 XP</p>
-            </div>
           </section>
         </div>
       </section>
@@ -100,6 +96,7 @@
             <div id="progression-week-chest-bar"></div>
             <div id="progression-week-boss-threshold-bar"></div>
             <div id="progression-week-days-bar"></div>
+            <button id="claim-weekly-chest-btn" class="btn btn-success" type="button">Claim coffre hebdo</button>
           </article>
 
           <article class="progression-section">
@@ -128,6 +125,7 @@
         <section class="card manage-panel" aria-labelledby="create-title">
           <div class="create-toolbar">
             <h2 id="create-title">Catalogue des habitudes</h2>
+            <p class="progress-subtext">Crée, ajuste l'effort, puis active les habitudes que tu veux voir aujourd'hui.</p>
             <div class="toolbar-row">
               <input id="catalog-search-input" type="search" placeholder="Rechercher une habitude…" />
               <button id="new-quest-btn" class="btn btn-primary" type="button">+ Nouvelle habitude</button>
@@ -188,13 +186,20 @@
                 <strong id="sounds-toggle-state">OFF</strong>
               </label>
             </div>
+            <div class="settings-row">
+              <label class="toggle-field" for="advanced-mode-toggle">
+                <span>Mode avancé :</span>
+                <input id="advanced-mode-toggle" type="checkbox" role="switch" />
+                <strong id="advanced-mode-state">OFF</strong>
+              </label>
+            </div>
             <div class="settings-row" id="sounds-volume-row">
               <label class="control-field" for="sounds-volume-range">Volume (0–100)
                 <input id="sounds-volume-range" type="range" min="0" max="100" step="1" value="70" />
               </label>
               <strong id="sounds-volume-value">70%</strong>
             </div>
-            <div class="settings-row" hidden>
+            <div class="settings-row advanced-only" hidden>
               <label class="toggle-field" for="developer-mode-toggle">
                 <span>Mode développeur :</span>
                 <input id="developer-mode-toggle" type="checkbox" role="switch" />
@@ -203,7 +208,7 @@
             </div>
           </article>
 
-          <article class="card settings-section" aria-labelledby="settings-gameplay-title">
+          <article class="card settings-section advanced-only" aria-labelledby="settings-gameplay-title" hidden>
             <h3 id="settings-gameplay-title">Gameplay</h3>
             <div class="settings-row">
               <label class="toggle-field" for="vacation-toggle">
@@ -250,6 +255,15 @@
           </article>
 
 
+
+          <article class="card settings-section" aria-labelledby="settings-install-title">
+            <h3 id="settings-install-title">Installation</h3>
+            <div class="settings-actions">
+              <button id="install-app-btn" class="btn btn-primary" type="button" hidden>Installer l'app</button>
+            </div>
+            <p id="install-app-hint" class="progress-subtext">Chargement des options d'installation…</p>
+          </article>
+
           <article class="card settings-section" aria-labelledby="settings-backup-title">
             <h3 id="settings-backup-title">Sauvegarde (Beta 1)</h3>
             <p class="progress-subtext">Téléphone → PC : exporte sur téléphone puis importe sur PC.</p>
@@ -291,7 +305,7 @@
               <canvas id="backup-qr-canvas" hidden aria-label="QR export"></canvas>
             </details>
           </article>
-          <article id="developer-settings-section" class="card settings-section" aria-labelledby="settings-dev-title" hidden>
+          <article id="developer-settings-section" class="card settings-section advanced-only" aria-labelledby="settings-dev-title" hidden>
             <h3 id="settings-dev-title">Développeur</h3>
             <div class="settings-row">
               <label class="toggle-field" for="debug-date-toggle">
@@ -307,7 +321,7 @@
             <p id="dev-tech-info" class="progress-subtext">Clé save: habitrpg.save • Schéma: -</p>
           </article>
 
-          <article class="card settings-section" aria-labelledby="settings-data-title" hidden>
+          <article class="card settings-section advanced-only" aria-labelledby="settings-data-title" hidden>
             <h3 id="settings-data-title">Gestion des données</h3>
             <div class="settings-actions">
               <button id="reset-btn" class="btn btn-danger" type="button">Restart / Reset progression</button>
@@ -363,6 +377,20 @@
         <p id="level-up-message"></p>
         <button id="level-up-close-btn" class="btn btn-primary" type="button">Continuer</button>
       </div>
+    </div>
+
+
+    <div id="onboarding-modal" class="editor-modal" hidden>
+      <div class="editor-backdrop" data-action="close-onboarding"></div>
+      <aside class="editor-panel onboarding-panel" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <p class="hero-kicker">Bienvenue</p>
+        <h3 id="onboarding-title">Démarrage rapide</h3>
+        <p id="onboarding-text" class="progress-subtext">Commence en 15 secondes.</p>
+        <div class="form-actions">
+          <button id="onboarding-primary-btn" class="btn btn-primary" type="button">Continuer</button>
+          <button id="onboarding-skip-btn" class="btn btn-ghost" type="button">Ne plus afficher</button>
+        </div>
+      </aside>
     </div>
 
 
