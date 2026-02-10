@@ -1,0 +1,9 @@
+{
+  "name": "HabitHub Offline",
+  "short_name": "HabitHub",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#123886",
+  "background_color": "#08152f"
+}
