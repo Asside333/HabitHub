@@ -553,9 +553,11 @@
       return {
         hapticsEnabled: safeSettings.hapticsEnabled !== false,
         developerModeEnabled: safeSettings.developerModeEnabled === true,
+        advancedModeEnabled: safeSettings.advancedModeEnabled === true,
         reduceMotion: safeSettings.reduceMotion === true,
         soundsEnabled: safeSettings.soundsEnabled === true,
         soundsVolume: clamp(Math.round(Number(safeSettings.soundsVolume) || 70), 0, 100),
+        onboardingDismissed: safeSettings.onboardingDismissed === true,
         economy: normalizedSettings.economy,
         economyOverrides: normalizedSettings.economyOverrides,
       };
@@ -622,12 +624,15 @@
     lastHeroXpTotal: null,
     progressRatios: {},
     editor: { open: false, mode: "create", questId: null, icon: ICON_CATALOG[0].key },
+    onboardingStep: 0,
+    deferredInstallPrompt: null,
     bindRefs() {
       this.refs = {
         tabButtons: Array.from(document.querySelectorAll(".tab-btn")),
         tabPanels: Array.from(document.querySelectorAll("[data-tab-panel]")),
         questsList: document.getElementById("quests-list"),
         todayOpenProgressionBtn: document.getElementById("today-open-progression-btn"),
+        todayOpenProgressionInlineBtn: document.getElementById("today-open-progression-inline-btn"),
         xp: document.getElementById("xp-value"),
         gold: document.getElementById("gold-value"),
         levelBadge: document.getElementById("level-badge"),
@@ -666,6 +671,8 @@
         hapticsToggleState: document.getElementById("haptics-toggle-state"),
         reduceMotionToggle: document.getElementById("reduce-motion-toggle"),
         reduceMotionState: document.getElementById("reduce-motion-state"),
+        advancedModeToggle: document.getElementById("advanced-mode-toggle"),
+        advancedModeState: document.getElementById("advanced-mode-state"),
         soundsToggle: document.getElementById("sounds-toggle"),
         soundsToggleState: document.getElementById("sounds-toggle-state"),
         soundsVolumeRange: document.getElementById("sounds-volume-range"),
@@ -707,6 +714,8 @@
         editorRestore: document.getElementById("editor-restore-btn"),
         editorDelete: document.getElementById("editor-delete-btn"),
         toastRoot: document.getElementById("toast-root"),
+        installAppBtn: document.getElementById("install-app-btn"),
+        installAppHint: document.getElementById("install-app-hint"),
         backupExportJsonBtn: document.getElementById("backup-export-json-btn"),
         backupImportFileInput: document.getElementById("backup-import-file-input"),
         backupImportJsonBtn: document.getElementById("backup-import-json-btn"),
@@ -727,6 +736,12 @@
         levelUpLevel: document.getElementById("level-up-level"),
         levelUpMessage: document.getElementById("level-up-message"),
         levelUpCloseBtn: document.getElementById("level-up-close-btn"),
+        onboardingModal: document.getElementById("onboarding-modal"),
+        onboardingTitle: document.getElementById("onboarding-title"),
+        onboardingText: document.getElementById("onboarding-text"),
+        onboardingPrimaryBtn: document.getElementById("onboarding-primary-btn"),
+        onboardingSkipBtn: document.getElementById("onboarding-skip-btn"),
+        advancedOnlySections: Array.from(document.querySelectorAll(".advanced-only")),
       };
     },
     showToast(typeOrMessage, titleOrOptions, maybeMessage, maybeOptions) {
@@ -1033,8 +1048,8 @@
       return { accent: "#7eb1ff", glow: "rgba(126, 177, 255, 0.3)", bucket: "high" };
     }
     if (safeRatio < 0.5) return { accent: "#63a7ff", glow: "rgba(99, 167, 255, 0.33)", bucket: "low" };
-    if (safeRatio < 0.8) return { accent: "#9a86ff", glow: "rgba(154, 134, 255, 0.34)", bucket: "mid" };
-    return { accent: "#f4cb57", glow: "rgba(244, 203, 87, 0.42)", bucket: "high" };
+    if (safeRatio < 0.8) return { accent: "#8f85ff", glow: "rgba(143, 133, 255, 0.34)", bucket: "mid" };
+    return { accent: "#58df8d", glow: "rgba(88, 223, 141, 0.46)", bucket: "high" };
   }
 
   function renderProgressBar(options) {
@@ -1055,6 +1070,7 @@
     const ariaText = `${label} ${safeValue} sur ${safeMax}${showPercent ? ` (${percent}%)` : ""}`;
 
     const classes = ["pbar", `pbar--${variant}`, `is-${palette.bucket}`];
+    if (variant === "reward" && ratio >= 0.65) classes.push("pbar--goal-gradient");
     if (config.glow !== false && ratio >= 0.85 && !prefersReducedMotion()) classes.push("pbar--glow");
     const markup = `
       <div class="${classes.join(" ")}" role="group" aria-label="${label}">
@@ -1076,6 +1092,7 @@
     node.style.setProperty("--bar-ratio", String(ratio));
     node.style.setProperty("--bar-accent", palette.accent);
     node.style.setProperty("--bar-glow", palette.glow);
+    node.style.setProperty("--goal-intensity", String(Math.max(0, Math.min(1, (ratio - 0.65) / 0.35))));
     const ratioKey = typeof config.pulseKey === "string" ? config.pulseKey : config.id;
     const previousRatio = Number(ui.progressRatios[ratioKey]);
     if (config.pulseOnIncrease !== false && !prefersReducedMotion() && Number.isFinite(previousRatio) && ratio > previousRatio) {
@@ -1506,18 +1523,30 @@
     return typeof labels[index] === "string" && labels[index].trim() ? labels[index] : fallback;
   }
 
-  function updateEditorEffortUi() {
-    if (!ui.refs.editorEffort) return;
-    const effort = sanitizeEffort(ui.refs.editorEffort.value);
-    ui.refs.editorEffort.value = String(effort);
+  function updateEffortPreview(source) {
+    const slider = source || ui.refs.editorEffort;
+    if (!slider) return;
+
+    const effort = sanitizeEffort(slider.value);
+    slider.value = String(effort);
+    if (ui.refs.editorEffort && ui.refs.editorEffort !== slider) {
+      ui.refs.editorEffort.value = slider.value;
+    }
+
     const reward = computeEffectiveReward({ effort }, state.game, getActiveDateIso(), { preview: true });
     const scale = getEffortScaleConfig();
-    ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
-    ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
-      ? `Gains effectifs : +${reward.xp} XP`
-      : `Gains effectifs : ${formatRewardText(reward.xp, reward.gold, true)}`;
+
+    if (ui.refs.editorEffortLabel) {
+      ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
+    }
+    if (ui.refs.editorRewardPreview) {
+      ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
+        ? `Gains effectifs : +${reward.xp} XP`
+        : `Gains effectifs : ${formatRewardText(reward.xp, reward.gold, true)}`;
+    }
+
     const ratio = ((effort - scale.min) / Math.max(1, scale.max - scale.min)) * 100;
-    ui.refs.editorEffort.style.setProperty("--range-progress", `${clamp(ratio, 0, 100)}%`);
+    slider.style.setProperty("--range-progress", `${clamp(ratio, 0, 100)}%`);
   }
 
   function logEvent(type, payload) {
@@ -1791,8 +1820,14 @@
     if (nextLevel > beforeLevel) {
       const bonus = isGoldEnabled() ? computeLevelUpReward(beforeLevel, nextLevel) : 0;
       state.game.gold += bonus;
-      ui.showToast(isGoldEnabled() ? `Level up ! +${bonus} Gold` : "Level up !");
+      ui.showToast("success", "Level up", isGoldEnabled() ? `Niveau ${nextLevel} atteint • +${bonus} Gold` : `Niveau ${nextLevel} atteint !`);
       ui.showLevelUpOverlay(nextLevel, bonus);
+      document.body.classList.remove("levelup-spark");
+      if (!prefersReducedMotion()) {
+        void document.body.offsetWidth;
+        document.body.classList.add("levelup-spark");
+        setTimeout(() => document.body.classList.remove("levelup-spark"), 700);
+      }
       haptics.levelUp();
       audioFx.play("levelup");
     }
@@ -2046,17 +2081,21 @@
     const safeRemain = Math.max(0, Math.floor(Number(levelProgress.xpRemaining) || 0));
 
     renderXpHeroBar();
-    ui.refs.levelText.textContent = `XP du niveau : ${safeInto} / ${safeNeed}`;
-    ui.refs.levelBar.style.width = `${Math.round(safeRatio * 100)}%`;
-    ui.refs.levelRemain.textContent = `Reste: ${safeRemain} XP`;
-
-    ui.refs.levelTrack.setAttribute("aria-valuenow", String(safeInto));
-    ui.refs.levelTrack.setAttribute("aria-valuemax", String(safeNeed));
+    if (ui.refs.levelText && ui.refs.levelBar && ui.refs.levelRemain && ui.refs.levelTrack) {
+      ui.refs.levelText.textContent = `XP du niveau : ${safeInto} / ${safeNeed}`;
+      ui.refs.levelBar.style.width = `${Math.round(safeRatio * 100)}%`;
+      ui.refs.levelRemain.textContent = `Reste: ${safeRemain} XP`;
+      ui.refs.levelTrack.setAttribute("aria-valuenow", String(safeInto));
+      ui.refs.levelTrack.setAttribute("aria-valuemax", String(safeNeed));
+    }
   }
 
   function renderTodayTab() {
     const visibleQuests = catalog.getVisibleQuests();
     ui.refs.questsList.innerHTML = "";
+    if (!visibleQuests.length) {
+      ui.refs.questsList.innerHTML = `<li class="empty-state"><p>Aucune quête visible pour aujourd'hui.</p><button class="btn btn-primary" type="button" data-action="open-catalogue">Ouvrir Catalogue</button></li>`;
+    }
     visibleQuests.forEach((quest) => {
       const isCompleted = state.game.completedQuestIds.includes(quest.id);
       const li = document.createElement("li");
@@ -2288,6 +2327,11 @@
     ui.refs.soundsVolumeRange.value = String(state.settings.soundsVolume);
     ui.refs.soundsVolumeValue.textContent = `${state.settings.soundsVolume}%`;
     ui.refs.soundsVolumeRow.hidden = !state.settings.soundsEnabled;
+    ui.refs.advancedModeToggle.checked = state.settings.advancedModeEnabled;
+    ui.refs.advancedModeState.textContent = state.settings.advancedModeEnabled ? "ON" : "OFF";
+    ui.refs.advancedOnlySections.forEach((section) => {
+      section.hidden = !state.settings.advancedModeEnabled;
+    });
 
     applyGoldVisibility();
     if (ui.refs.economyGoldToggle) ui.refs.economyGoldToggle.checked = isGoldEnabled();
@@ -2324,7 +2368,7 @@
 
     ui.refs.developerModeToggle.checked = state.settings.developerModeEnabled;
     ui.refs.developerModeState.textContent = state.settings.developerModeEnabled ? "ON" : "OFF";
-    ui.refs.developerSettingsSection.hidden = !state.settings.developerModeEnabled;
+    ui.refs.developerSettingsSection.hidden = !state.settings.advancedModeEnabled || !state.settings.developerModeEnabled;
 
     if (!state.settings.developerModeEnabled) {
       ui.refs.debugDateToggle.checked = false;
@@ -2340,6 +2384,7 @@
 
     ui.refs.activeDateLabel.textContent = `Date active : ${getActiveDateIso()}`;
     ui.refs.devTechInfo.textContent = `Clé save: ${storage.keys.save} • Schéma: v${state.game.v}`;
+    renderInstallUi();
   }
 
   function getFilteredCatalog() {
@@ -2422,7 +2467,7 @@
     ui.refs.editorError.textContent = "";
     ui.refs.editorModal.hidden = false;
     document.body.classList.add("modal-open");
-    updateEditorEffortUi();
+    updateEffortPreview();
     renderIconGrid();
   }
 
@@ -2434,6 +2479,7 @@
 
   function validateEditorForm() {
     const title = sanitizeTitle(ui.refs.editorName.value);
+    updateEffortPreview();
     const effort = sanitizeEffort(ui.refs.editorEffort.value);
     const reward = computeEffectiveReward({ effort }, state.game, getActiveDateIso(), { preview: true });
     if (title.length < 2 || title.length > 40) return { error: "Le nom doit faire entre 2 et 40 caractères." };
@@ -2559,6 +2605,93 @@
     if (ui.activeTab === "settings") renderSettingsTab();
   }
 
+
+  const ONBOARDING_STEPS = [
+    {
+      title: "Choisis une première habitude",
+      text: "Active une habitude du Catalogue puis reviens ici.",
+      ctaLabel: "Aller au Catalogue",
+      tab: "catalogue",
+    },
+    {
+      title: "Termine 1 quête aujourd'hui",
+      text: "Valide une quête pour démarrer ta streak du jour.",
+      ctaLabel: "Aller à Aujourd'hui",
+      tab: "today",
+    },
+  ];
+
+  function isFirstRun() {
+    const hasQuestProgress = Array.isArray(state.game.completedQuestIds) && state.game.completedQuestIds.length > 0;
+    const hasXpProgress = Number(state.game.totalXp) > 0;
+    return !hasQuestProgress && !hasXpProgress;
+  }
+
+  function showOnboardingIfNeeded() {
+    if (!ui.refs.onboardingModal || state.settings.onboardingDismissed || !isFirstRun()) return;
+    ui.onboardingStep = 0;
+    renderOnboardingStep();
+    ui.refs.onboardingModal.hidden = false;
+    document.body.classList.add("modal-open");
+  }
+
+  function closeOnboarding(dismissPermanently) {
+    if (dismissPermanently) {
+      state.settings.onboardingDismissed = true;
+      storage.saveSettings(state.settings);
+    }
+    if (!ui.refs.onboardingModal) return;
+    ui.refs.onboardingModal.hidden = true;
+    document.body.classList.remove("modal-open");
+  }
+
+  function renderOnboardingStep() {
+    const step = ONBOARDING_STEPS[Math.max(0, Math.min(ONBOARDING_STEPS.length - 1, ui.onboardingStep || 0))];
+    if (!step || !ui.refs.onboardingTitle) return;
+    ui.refs.onboardingTitle.textContent = step.title;
+    ui.refs.onboardingText.textContent = step.text;
+    ui.refs.onboardingPrimaryBtn.textContent = step.ctaLabel;
+  }
+
+
+
+  function renderInstallUi() {
+    if (!ui.refs.installAppBtn || !ui.refs.installAppHint) return;
+    const canPrompt = Boolean(ui.deferredInstallPrompt);
+    ui.refs.installAppBtn.hidden = !canPrompt;
+    if (canPrompt) {
+      ui.refs.installAppHint.textContent = "Installe HabitHub pour un accès rapide hors ligne.";
+      return;
+    }
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+    ui.refs.installAppHint.textContent = isIos
+      ? "iOS: Safari > Partager > Ajouter à l'écran d'accueil."
+      : "L'installation directe apparaît quand le navigateur la propose.";
+  }
+
+  function initPwaFeatures() {
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {
+          ui.showToast("warn", "PWA", "Service worker non enregistré.");
+        });
+      });
+    }
+
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      ui.deferredInstallPrompt = event;
+      renderInstallUi();
+    });
+
+    window.addEventListener("appinstalled", () => {
+      ui.deferredInstallPrompt = null;
+      renderInstallUi();
+      ui.showToast("success", "Installation", "HabitHub est installée.");
+    });
+  }
+
+
   function setActiveTab(tabId) {
     const allowedTabs = new Set(["today", "catalogue", "progression", "settings"]);
     ui.activeTab = allowedTabs.has(tabId) ? tabId : "today";
@@ -2588,9 +2721,24 @@
       });
     });
 
-    ui.refs.todayOpenProgressionBtn?.addEventListener("click", () => {
+    const openProgression = () => {
       setActiveTab("progression");
       renderProgressionTab();
+    };
+
+    ui.refs.todayOpenProgressionBtn?.addEventListener("click", openProgression);
+    ui.refs.todayOpenProgressionInlineBtn?.addEventListener("click", openProgression);
+
+
+    ui.refs.installAppBtn?.addEventListener("click", async () => {
+      if (!ui.deferredInstallPrompt) {
+        renderInstallUi();
+        return;
+      }
+      ui.deferredInstallPrompt.prompt();
+      await ui.deferredInstallPrompt.userChoice.catch(() => null);
+      ui.deferredInstallPrompt = null;
+      renderInstallUi();
     });
 
     ui.refs.backupExportJsonBtn?.addEventListener("click", () => {
@@ -2723,6 +2871,12 @@
     });
 
     ui.refs.questsList.addEventListener("click", (event) => {
+      const catalogueCta = event.target.closest("[data-action='open-catalogue']");
+      if (catalogueCta) {
+        setActiveTab("catalogue");
+        renderCreateTab();
+        return;
+      }
       const button = event.target.closest("[data-action='toggle-complete']");
       if (!button) return;
       button.classList.remove("btn-punch");
@@ -2763,6 +2917,13 @@
       applyMotionPreferences();
       storage.saveSettings(state.settings);
       ui.showToast("info", "Animations", state.settings.reduceMotion ? "Animations réduites activées." : "Animations réduites désactivées.");
+    });
+
+    ui.refs.advancedModeToggle.addEventListener("change", () => {
+      state.settings.advancedModeEnabled = ui.refs.advancedModeToggle.checked;
+      ui.refs.advancedModeState.textContent = state.settings.advancedModeEnabled ? "ON" : "OFF";
+      storage.saveSettings(state.settings);
+      renderSettingsTab();
     });
 
     ui.refs.soundsToggle.addEventListener("change", () => {
@@ -2940,7 +3101,7 @@
     ui.refs.newQuestBtn.addEventListener("click", () => openQuestEditor("create"));
     ui.refs.resetBtn.addEventListener("click", resetProgressOnly);
     ui.refs.catalogResetBtn.addEventListener("click", resetCatalogOnly);
-    ui.refs.claimWeeklyChestBtn.addEventListener("click", () => {
+    ui.refs.claimWeeklyChestBtn?.addEventListener("click", () => {
       const result = claimWeeklyChestReward();
       if (result.ok) {
         ui.showToast("success", "Coffre hebdo", `${result.chestTier.id} ouvert : ${formatRewardText(result.chestTier.bonusXp, result.chestTier.bonusGold, true)}`);
@@ -2969,10 +3130,18 @@
       renderIconGrid();
     });
 
-    ui.refs.editorEffort.addEventListener("input", () => {
-      updateEditorEffortUi();
-      haptics.tap();
-    });
+    if (!ui.refs.editorForm.dataset.effortBindingReady) {
+      ui.refs.editorForm.addEventListener("input", (event) => {
+        const slider = event.target.closest("[data-role='effort-slider']");
+        if (!slider) return;
+        updateEffortPreview(slider);
+        haptics.tap();
+      });
+      ui.refs.editorForm.dataset.effortBindingReady = "1";
+      if (state.settings.developerModeEnabled || state.settings.advancedModeEnabled) {
+        console.debug("[HabitHub] effort slider binding ready");
+      }
+    }
 
     ui.refs.iconGrid.addEventListener("click", (event) => {
       const button = event.target.closest("[data-icon]");
@@ -3009,6 +3178,28 @@
       ui.closeLevelUpOverlay();
     });
 
+
+    ui.refs.onboardingPrimaryBtn?.addEventListener("click", () => {
+      const step = ONBOARDING_STEPS[Math.max(0, Math.min(ONBOARDING_STEPS.length - 1, ui.onboardingStep || 0))];
+      if (!step) return;
+      setActiveTab(step.tab);
+      if (step.tab === "catalogue") renderCreateTab();
+      if (step.tab === "today") renderTodayTab();
+      if (ui.onboardingStep >= ONBOARDING_STEPS.length - 1) {
+        closeOnboarding(true);
+        return;
+      }
+      ui.onboardingStep += 1;
+      renderOnboardingStep();
+    });
+
+    ui.refs.onboardingSkipBtn?.addEventListener("click", () => closeOnboarding(true));
+    ui.refs.onboardingModal?.addEventListener("click", (event) => {
+      const close = event.target.closest("[data-action='close-onboarding']");
+      if (!close) return;
+      closeOnboarding(false);
+    });
+
     document.addEventListener("keydown", (event) => {
       if (event.key !== "Escape") return;
       if (ui.refs.levelUpOverlay.hidden) return;
@@ -3023,6 +3214,7 @@
     ui.refs.filterSelect.value = ui.createFilter;
     ui.refs.sortSelect.value = ui.createSort;
     renderSettingsTab();
+    initPwaFeatures();
     applyMotionPreferences();
     setActiveTab(ui.activeTab);
     cleanupCompletedIds();
@@ -3036,6 +3228,7 @@
     storage.saveSettings(state.settings);
     storage.saveState(state.game);
     renderAllTabs();
+    showOnboardingIfNeeded();
   }
 
   document.addEventListener("DOMContentLoaded", init);

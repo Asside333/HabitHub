@@ -47,6 +47,11 @@
   box-sizing: border-box;
 }
 
+*:focus-visible {
+  outline: 2px solid rgba(147, 226, 176, 0.95);
+  outline-offset: 2px;
+}
+
 body {
   margin: 0;
   overflow-x: hidden;
@@ -472,6 +477,10 @@ h1 {
 }
 
 .pbar.pbar--reward { --bar-track: rgba(138, 154, 255, 0.26); }
+.pbar.pbar--reward.pbar--goal-gradient .pbar-fill {
+  filter: saturate(calc(1 + var(--goal-intensity, 0) * 0.28));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bar-accent) 68%, #ffffff), color-mix(in srgb, var(--bar-accent) calc(78% + var(--goal-intensity, 0) * 18%), #58cc6c));
+}
 .pbar.pbar--risk { --bar-track: rgba(144, 178, 133, 0.25); }
 .pbar.pbar--neutral { --bar-track: rgba(141, 167, 209, 0.26); }
 
@@ -510,6 +519,32 @@ h1 {
   padding: 0;
   display: grid;
   gap: var(--space-8);
+}
+
+
+.empty-state {
+  list-style: none;
+  border: 1px dashed rgba(196, 218, 255, 0.5);
+  border-radius: var(--radius-lg);
+  padding: var(--space-16);
+  background: rgba(15, 33, 80, 0.45);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.empty-state p {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+body.levelup-spark .level-up-modal {
+  animation: levelup-spark 620ms ease-out;
+}
+
+@keyframes levelup-spark {
+  0% { box-shadow: 0 0 0 0 rgba(132, 255, 182, 0.15); }
+  45% { box-shadow: 0 0 0 10px rgba(132, 255, 182, 0.28); }
+  100% { box-shadow: 0 0 0 0 rgba(132, 255, 182, 0); }
 }
 
 .quest {
@@ -717,6 +752,13 @@ h1 {
   animation: btn-spin 640ms linear infinite;
 }
 
+
+.btn-sm {
+  min-height: 44px;
+  padding: 0.42rem 0.8rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+}
 .btn-primary {
   --btn-color: #08311a;
   --btn-bg: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary2) 26%, var(--primary)));
@@ -1032,6 +1074,7 @@ body.reduce-motion .pbar--glow .pbar-fill {
 }
 
 .tab-btn {
+  min-height: 44px;
   width: 100%;
   min-width: 0;
   display: inline-flex;
@@ -1411,13 +1454,18 @@ body.reduce-motion .pbar--glow .pbar-fill {
 .editor-modal {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: 260;
 }
 
 .editor-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(2, 9, 30, 0.75);
+}
+
+.onboarding-panel {
+  display: grid;
+  gap: 0.7rem;
 }
 
 .editor-panel {
@@ -1665,6 +1713,7 @@ body.reduce-motion .pbar--glow .pbar-fill {
   }
 
   .tabs.app-nav .tab-btn {
+  min-height: 44px;
     min-height: 56px;
     padding: 0.45rem 0.35rem;
     border-radius: var(--radius-sm);
