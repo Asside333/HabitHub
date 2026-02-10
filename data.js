@@ -53,6 +53,16 @@ const PROGRESSION_CONFIG = {
 const ECONOMY_CONFIG = {
   mode: "balanced",
   goldEnabled: true,
+  smoothingPreset: "standard",
+  smoothingPresets: {
+    relax: { dailyXpCapBase: 180, dailyGoldCapBase: 90 },
+    standard: { dailyXpCapBase: 120, dailyGoldCapBase: 60 },
+    strict: { dailyXpCapBase: 90, dailyGoldCapBase: 40 },
+  },
+  dailyCapRanges: {
+    xp: { min: 20, max: 400, step: 5 },
+    gold: { min: 0, max: 250, step: 5 },
+  },
   supportedModes: ["balanced", "raw"],
   goldRewardMode: "table",
   goldRatio: 0.5,

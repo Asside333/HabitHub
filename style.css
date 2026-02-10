@@ -1436,11 +1436,30 @@ body.reduce-motion .xp-hero-fill {
   min-width: 0;
 }
 
-#sounds-volume-value {
+#sounds-volume-value,
+#economy-xp-cap-value,
+#economy-gold-cap-value {
   min-height: 44px;
   display: inline-flex;
   align-items: center;
 }
+
+.settings-presets {
+  align-items: center;
+}
+
+.preset-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preset-actions .btn.is-active {
+  border-color: rgba(130, 233, 164, 0.9);
+  background: rgba(44, 166, 89, 0.2);
+  color: #dfffe8;
+}
+
 .settings-actions {
   display: grid;
   gap: 0.6rem;

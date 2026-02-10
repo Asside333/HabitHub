@@ -30,6 +30,71 @@
     return { min, max, defaultEffort };
   }
 
+  function getEconomyCapRanges() {
+    const ranges = ECONOMY_CONFIG?.dailyCapRanges || {};
+    const xpMin = Math.max(0, Math.floor(Number(ranges.xp?.min) || 0));
+    const xpMax = Math.max(xpMin, Math.floor(Number(ranges.xp?.max) || 400));
+    const xpStep = Math.max(1, Math.floor(Number(ranges.xp?.step) || 1));
+    const goldMin = Math.max(0, Math.floor(Number(ranges.gold?.min) || 0));
+    const goldMax = Math.max(goldMin, Math.floor(Number(ranges.gold?.max) || 250));
+    const goldStep = Math.max(1, Math.floor(Number(ranges.gold?.step) || 1));
+    return {
+      xp: { min: xpMin, max: xpMax, step: xpStep },
+      gold: { min: goldMin, max: goldMax, step: goldStep },
+    };
+  }
+
+  function isGoldEnabled() {
+    return ECONOMY_CONFIG.goldEnabled !== false;
+  }
+
+  function formatRewardText(xpValue, goldValue, withPlusPrefix = true) {
+    const safeXp = Math.max(0, Math.floor(Number(xpValue) || 0));
+    const safeGold = Math.max(0, Math.floor(Number(goldValue) || 0));
+    const prefix = withPlusPrefix ? "+" : "";
+    if (!isGoldEnabled()) return `${prefix}${safeXp} XP`;
+    return `${prefix}${safeXp} XP • ${prefix}${safeGold} Gold`;
+  }
+
+  function getEconomyPresets() {
+    const presets = ECONOMY_CONFIG?.smoothingPresets;
+    if (!presets || typeof presets !== "object") return {};
+    return presets;
+  }
+
+  function getPresetLabel(presetKey) {
+    return { relax: "Relax", standard: "Standard", strict: "Strict" }[presetKey] || presetKey;
+  }
+
+  function getConfiguredDefaultPreset() {
+    const configured = typeof ECONOMY_CONFIG.smoothingPreset === "string" ? ECONOMY_CONFIG.smoothingPreset : "standard";
+    return getEconomyPresets()[configured] ? configured : "standard";
+  }
+
+  function resolveEconomyOverrides(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const ranges = getEconomyCapRanges();
+    const xpDefault = Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase) || 0);
+    const goldDefault = Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase) || 0);
+    const smoothingPreset = typeof source.smoothingPreset === "string" && getEconomyPresets()[source.smoothingPreset]
+      ? source.smoothingPreset
+      : getConfiguredDefaultPreset();
+    return {
+      goldEnabled: source.goldEnabled !== undefined ? source.goldEnabled !== false : ECONOMY_CONFIG.goldEnabled !== false,
+      dailyXpCapBase: clamp(Math.floor(Number(source.dailyXpCapBase ?? xpDefault) || 0), ranges.xp.min, ranges.xp.max),
+      dailyGoldCapBase: clamp(Math.floor(Number(source.dailyGoldCapBase ?? goldDefault) || 0), ranges.gold.min, ranges.gold.max),
+      smoothingPreset,
+    };
+  }
+
+  function applyEconomySettingsToConfig(settings) {
+    const overrides = resolveEconomyOverrides(settings?.economyOverrides);
+    ECONOMY_CONFIG.goldEnabled = overrides.goldEnabled;
+    ECONOMY_CONFIG.dailyXpCapBase = overrides.dailyXpCapBase;
+    ECONOMY_CONFIG.dailyGoldCapBase = overrides.dailyGoldCapBase;
+    ECONOMY_CONFIG.smoothingPreset = overrides.smoothingPreset;
+  }
+
   function sanitizeRewardInput(value) {
     if (!value || typeof value !== "object") return undefined;
     const rewardInput = {};
@@ -359,15 +424,14 @@
     },
     loadSettings() {
       const settings = this.loadJson(this.keys.settings, {});
-      if (!settings || typeof settings !== "object") {
-        return { hapticsEnabled: true, developerModeEnabled: false, reduceMotion: false, soundsEnabled: false, soundsVolume: 70 };
-      }
+      const safeSettings = settings && typeof settings === "object" ? settings : {};
       return {
-        hapticsEnabled: settings.hapticsEnabled !== false,
-        developerModeEnabled: settings.developerModeEnabled === true,
-        reduceMotion: settings.reduceMotion === true,
-        soundsEnabled: settings.soundsEnabled === true,
-        soundsVolume: clamp(Math.round(Number(settings.soundsVolume) || 70), 0, 100),
+        hapticsEnabled: safeSettings.hapticsEnabled !== false,
+        developerModeEnabled: safeSettings.developerModeEnabled === true,
+        reduceMotion: safeSettings.reduceMotion === true,
+        soundsEnabled: safeSettings.soundsEnabled === true,
+        soundsVolume: clamp(Math.round(Number(safeSettings.soundsVolume) || 70), 0, 100),
+        economyOverrides: resolveEconomyOverrides(safeSettings.economyOverrides),
       };
     },
     saveSettings(settings) {
@@ -484,6 +548,16 @@
         soundsVolumeRange: document.getElementById("sounds-volume-range"),
         soundsVolumeValue: document.getElementById("sounds-volume-value"),
         soundsVolumeRow: document.getElementById("sounds-volume-row"),
+        economyGoldToggle: document.getElementById("economy-gold-toggle"),
+        economyGoldState: document.getElementById("economy-gold-state"),
+        economyXpCapRange: document.getElementById("economy-xp-cap-range"),
+        economyXpCapValue: document.getElementById("economy-xp-cap-value"),
+        economyGoldCapRow: document.getElementById("economy-gold-cap-row"),
+        economyGoldCapRange: document.getElementById("economy-gold-cap-range"),
+        economyGoldCapValue: document.getElementById("economy-gold-cap-value"),
+        economyPresetButtons: Array.from(document.querySelectorAll("[data-economy-preset]")),
+        goldStatCard: document.getElementById("gold-stat-card"),
+        goldSortOption: document.getElementById("sort-gold-desc-option"),
         catalogList: document.getElementById("catalog-list"),
         bulkHideBtn: document.getElementById("bulk-hide-btn"),
         catalogResetBtn: document.getElementById("catalog-reset-btn"),
@@ -569,7 +643,7 @@
       this.refs.levelUpTitle.textContent = overlayConfig.title || "LEVEL UP";
       this.refs.levelUpCloseBtn.textContent = overlayConfig.ctaLabel || "Continuer";
       this.refs.levelUpLevel.textContent = `Niveau ${level} atteint !`;
-      this.refs.levelUpMessage.textContent = `Récompense: +${rewardGold} Gold`;
+      this.refs.levelUpMessage.textContent = isGoldEnabled() ? `Récompense: +${rewardGold} Gold` : "Récompense: progression XP";
       this.refs.levelUpOverlay.hidden = false;
       document.body.classList.add("modal-open");
     },
@@ -589,6 +663,7 @@
     settings: storage.loadSettings(),
     createUi: storage.loadCreateUi(),
   };
+  applyEconomySettingsToConfig(state.settings);
   state.game.daily = sanitizeDailyState(state.game.daily);
   state.game.cycles = sanitizeCycles(state.game.cycles);
   state.game.v = clamp(Math.floor(Number(state.game.v) || 1), 1, 999);
@@ -882,7 +957,8 @@
     const levelOffset = Math.max(0, safeLevel - 1);
     const fallbackCaps = PROGRESSION_CONFIG.antiExploit?.caps || {};
     const capXpPerDay = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase ?? fallbackCaps.capXpPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapPerLevel) || 0)) * levelOffset));
-    const capGoldPerDay = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase ?? fallbackCaps.capGoldPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapPerLevel) || 0)) * levelOffset));
+    const capGoldPerDayRaw = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase ?? fallbackCaps.capGoldPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapPerLevel) || 0)) * levelOffset));
+    const capGoldPerDay = isGoldEnabled() ? capGoldPerDayRaw : 0;
     return { capXpPerDay, capGoldPerDay };
   }
 
@@ -974,7 +1050,7 @@
     ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
     ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
       ? `Gains effectifs : +${reward.xp} XP`
-      : `Gains effectifs : +${reward.xp} XP • +${reward.gold} Gold`;
+      : `Gains effectifs : ${formatRewardText(reward.xp, reward.gold, true)}`;
     const ratio = ((effort - scale.min) / Math.max(1, scale.max - scale.min)) * 100;
     ui.refs.editorEffort.style.setProperty("--range-progress", `${clamp(ratio, 0, 100)}%`);
   }
@@ -1239,15 +1315,17 @@
 
   function applyDelta(xpDelta, goldDelta) {
     const beforeLevel = Math.max(1, Number(state.game.level) || 1);
-    state.game.xp = Math.max(0, state.game.xp + xpDelta);
-    state.game.gold = Math.max(0, state.game.gold + goldDelta);
+    const safeXpDelta = Math.floor(Number(xpDelta) || 0);
+    const safeGoldDelta = isGoldEnabled() ? Math.floor(Number(goldDelta) || 0) : 0;
+    state.game.xp = Math.max(0, state.game.xp + safeXpDelta);
+    state.game.gold = Math.max(0, state.game.gold + safeGoldDelta);
     recomputeTotalXp();
     const progress = computeLevelProgress(state.game.totalXp);
     const nextLevel = Math.max(beforeLevel, progress.level);
     if (nextLevel > beforeLevel) {
-      const bonus = computeLevelUpReward(beforeLevel, nextLevel);
+      const bonus = isGoldEnabled() ? computeLevelUpReward(beforeLevel, nextLevel) : 0;
       state.game.gold += bonus;
-      ui.showToast(`Level up ! +${bonus} Gold`);
+      ui.showToast(isGoldEnabled() ? `Level up ! +${bonus} Gold` : "Level up !");
       ui.showLevelUpOverlay(nextLevel, bonus);
       haptics.levelUp();
       audioFx.play("levelup");
@@ -1355,7 +1433,7 @@
       ui.lastCompletedQuestId = null;
       rewardResult = rollbackCompletedQuest(quest, dateKey);
       if (rewardResult.applied) {
-        ui.showToast("info", "Quête annulée", `${rewardResult.xpDelta} XP • ${rewardResult.goldDelta} Gold`);
+        ui.showToast("info", "Quête annulée", formatRewardText(rewardResult.xpDelta, rewardResult.goldDelta, false));
       }
       haptics.undo();
     } else {
@@ -1374,9 +1452,9 @@
           haptics.error();
           audioFx.play("pop");
         } else if (rewardResult.reason === "claim_partial") {
-          ui.showToast("info", "Quête validée (cap)", `+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
+          ui.showToast("info", "Quête validée (cap)", formatRewardText(rewardResult.xpDelta, rewardResult.goldDelta, true));
         } else {
-          ui.showToast("success", "Quête validée", `+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
+          ui.showToast("success", "Quête validée", formatRewardText(rewardResult.xpDelta, rewardResult.goldDelta, true));
         }
       } else if (rewardResult.reason === "already_claimed") {
         ui.showToast("info", "Déjà récupérée", "Récompense déjà récupérée aujourd'hui.");
@@ -1454,10 +1532,32 @@
     ui.lastHeroXpTotal = totalXp;
   }
 
+  function renderRewardChips(reward) {
+    const safeReward = reward && typeof reward === "object" ? reward : { xp: 0, gold: 0 };
+    const xpChip = `<span class="chip chip-xp">+${Math.max(0, Math.floor(Number(safeReward.xp) || 0))} XP</span>`;
+    if (!isGoldEnabled()) return xpChip;
+    const gold = Math.max(0, Math.floor(Number(safeReward.gold) || 0));
+    return `${xpChip}<span class="chip chip-gold">+${gold} Gold</span>`;
+  }
+
+  function applyGoldVisibility() {
+    const goldVisible = isGoldEnabled();
+    if (ui.refs.goldStatCard) ui.refs.goldStatCard.hidden = !goldVisible;
+    if (ui.refs.economyGoldCapRow) ui.refs.economyGoldCapRow.hidden = !goldVisible;
+    if (ui.refs.goldSortOption) ui.refs.goldSortOption.hidden = !goldVisible;
+    if (!goldVisible && ui.createSort === "goldDesc") {
+      ui.createSort = "recent";
+      state.createUi.sort = "recent";
+      storage.saveCreateUi(state.createUi);
+      if (ui.refs.sortSelect) ui.refs.sortSelect.value = "recent";
+    }
+  }
+
   function renderStats() {
     ui.refs.xp.textContent = String(state.game.xp);
     ui.refs.gold.textContent = String(state.game.gold);
     ui.refs.levelBadge.textContent = `Lv ${state.game.level}`;
+    applyGoldVisibility();
 
     const levelProgress = computeLevelProgressAtLevel(state.game.totalXp, state.game.level);
     const safeRatio = clamp(Number(levelProgress.ratio) || 0, 0, 1);
@@ -1489,7 +1589,7 @@
           <div class="quest-copy">
             <p class="quest-title">${quest.title}</p>
             <p class="quest-subtitle">${isCompleted ? "Quête complétée" : "Objectif quotidien"}</p>
-            <div class="reward-chips"><span class="chip chip-xp">+${getRewardPreviewFromEffort(quest).xp} XP</span><span class="chip chip-gold">+${getRewardPreviewFromEffort(quest).gold} Gold</span></div>
+            <div class="reward-chips">${renderRewardChips(getRewardPreviewFromEffort(quest))}</div>
           </div>
         </div>
         <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>
@@ -1534,6 +1634,31 @@
     ui.refs.soundsVolumeRange.value = String(state.settings.soundsVolume);
     ui.refs.soundsVolumeValue.textContent = `${state.settings.soundsVolume}%`;
     ui.refs.soundsVolumeRow.hidden = !state.settings.soundsEnabled;
+
+    applyGoldVisibility();
+    ui.refs.economyGoldToggle.checked = isGoldEnabled();
+    ui.refs.economyGoldState.textContent = isGoldEnabled() ? "ON" : "OFF";
+    const capRanges = getEconomyCapRanges();
+    ui.refs.economyXpCapRange.min = String(capRanges.xp.min);
+    ui.refs.economyXpCapRange.max = String(capRanges.xp.max);
+    ui.refs.economyXpCapRange.step = String(capRanges.xp.step);
+    ui.refs.economyXpCapRange.value = String(Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase) || capRanges.xp.min));
+    ui.refs.economyXpCapValue.textContent = `${ui.refs.economyXpCapRange.value} XP`;
+    ui.refs.economyXpCapRange.style.setProperty("--range-progress", `${((Number(ui.refs.economyXpCapRange.value) - capRanges.xp.min) / Math.max(1, capRanges.xp.max - capRanges.xp.min)) * 100}%`);
+
+    ui.refs.economyGoldCapRange.min = String(capRanges.gold.min);
+    ui.refs.economyGoldCapRange.max = String(capRanges.gold.max);
+    ui.refs.economyGoldCapRange.step = String(capRanges.gold.step);
+    ui.refs.economyGoldCapRange.value = String(Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase) || capRanges.gold.min));
+    ui.refs.economyGoldCapValue.textContent = `${ui.refs.economyGoldCapRange.value} Gold`;
+    ui.refs.economyGoldCapRange.style.setProperty("--range-progress", `${((Number(ui.refs.economyGoldCapRange.value) - capRanges.gold.min) / Math.max(1, capRanges.gold.max - capRanges.gold.min)) * 100}%`);
+
+    const activePreset = typeof ECONOMY_CONFIG.smoothingPreset === "string" ? ECONOMY_CONFIG.smoothingPreset : getConfiguredDefaultPreset();
+    ui.refs.economyPresetButtons.forEach((button) => {
+      const isActive = button.dataset.economyPreset === activePreset;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
 
     ui.refs.vacationState.textContent = state.game.daily.vacationMode ? "ON" : "OFF";
     ui.refs.vacationToggle.checked = state.game.daily.vacationMode;
@@ -1597,7 +1722,7 @@
           <div class="quest-icon">${catalog.getIcon(quest.icon).svg}</div>
           <div>
             <p class="quest-title">${quest.title}</p>
-            <div class="reward-chips"><span class="chip chip-xp">+${getRewardPreviewFromEffort(quest).xp} XP</span><span class="chip chip-gold">+${getRewardPreviewFromEffort(quest).gold} Gold</span></div>
+            <div class="reward-chips">${renderRewardChips(getRewardPreviewFromEffort(quest))}</div>
             <div class="reward-chips"><span class="chip ${quest.source === "seed" ? "chip-seed" : "chip-custom"}">${quest.source === "seed" ? "Seed" : "Custom"}</span><span class="chip ${quest.isHidden ? "chip-hidden" : "chip-visible"}">${quest.isHidden ? "Masquée" : "Visible"}</span>${quest.hasOverride ? '<span class="chip chip-override">Modifiée</span>' : ""}</div>
           </div>
         </div>
@@ -1865,6 +1990,55 @@
       audioFx.play("pop");
     });
 
+    ui.refs.economyGoldToggle.addEventListener("change", () => {
+      state.settings.economyOverrides.goldEnabled = ui.refs.economyGoldToggle.checked;
+      applyEconomySettingsToConfig(state.settings);
+      storage.saveSettings(state.settings);
+      renderAllTabs();
+      const message = isGoldEnabled() ? "Gold réactivé." : "Gold désactivé (gains à 0).";
+      ui.showToast("info", "Économie", message);
+    });
+
+    ui.refs.economyXpCapRange.addEventListener("input", () => {
+      const ranges = getEconomyCapRanges();
+      const next = clamp(Math.floor(Number(ui.refs.economyXpCapRange.value) || 0), ranges.xp.min, ranges.xp.max);
+      ui.refs.economyXpCapRange.value = String(next);
+      ui.refs.economyXpCapValue.textContent = `${next} XP`;
+      ui.refs.economyXpCapRange.style.setProperty("--range-progress", `${((next - ranges.xp.min) / Math.max(1, ranges.xp.max - ranges.xp.min)) * 100}%`);
+      state.settings.economyOverrides.dailyXpCapBase = next;
+      applyEconomySettingsToConfig(state.settings);
+      storage.saveSettings(state.settings);
+    });
+
+    ui.refs.economyGoldCapRange.addEventListener("input", () => {
+      const ranges = getEconomyCapRanges();
+      const next = clamp(Math.floor(Number(ui.refs.economyGoldCapRange.value) || 0), ranges.gold.min, ranges.gold.max);
+      ui.refs.economyGoldCapRange.value = String(next);
+      ui.refs.economyGoldCapValue.textContent = `${next} Gold`;
+      ui.refs.economyGoldCapRange.style.setProperty("--range-progress", `${((next - ranges.gold.min) / Math.max(1, ranges.gold.max - ranges.gold.min)) * 100}%`);
+      state.settings.economyOverrides.dailyGoldCapBase = next;
+      applyEconomySettingsToConfig(state.settings);
+      storage.saveSettings(state.settings);
+    });
+
+    ui.refs.economyPresetButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const presetKey = button.dataset.economyPreset;
+        const preset = getEconomyPresets()[presetKey];
+        if (!preset) return;
+        const overrides = state.settings.economyOverrides;
+        if (preset.dailyXpCapBase !== undefined) overrides.dailyXpCapBase = preset.dailyXpCapBase;
+        if (preset.dailyGoldCapBase !== undefined) overrides.dailyGoldCapBase = preset.dailyGoldCapBase;
+        overrides.smoothingPreset = presetKey;
+        applyEconomySettingsToConfig(state.settings);
+        storage.saveSettings(state.settings);
+        renderSettingsTab();
+        renderTodayTab();
+        renderCreateTab();
+        ui.showToast("success", "Économie", `Preset ${getPresetLabel(presetKey)} appliqué.`);
+      });
+    });
+
     ui.refs.developerModeToggle.addEventListener("change", () => {
       state.settings.developerModeEnabled = ui.refs.developerModeToggle.checked;
       ui.refs.developerModeState.textContent = state.settings.developerModeEnabled ? "ON" : "OFF";
@@ -1963,7 +2137,7 @@
     ui.refs.claimWeeklyChestBtn.addEventListener("click", () => {
       const result = claimWeeklyChestReward();
       if (result.ok) {
-        ui.showToast("success", "Coffre hebdo", `${result.chestTier.id} ouvert : +${result.chestTier.bonusXp} XP • +${result.chestTier.bonusGold} Gold`);
+        ui.showToast("success", "Coffre hebdo", `${result.chestTier.id} ouvert : ${formatRewardText(result.chestTier.bonusXp, result.chestTier.bonusGold, true)}`);
         haptics.complete();
         audioFx.play("coin");
       } else if (result.reason === "already_claimed") {

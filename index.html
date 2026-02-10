@@ -44,7 +44,7 @@
               <p class="label">XP total</p>
               <strong id="xp-value" class="counter">0</strong>
             </article>
-            <article class="card stat-chip" aria-label="Pièces d'or">
+            <article id="gold-stat-card" class="card stat-chip" aria-label="Pièces d'or">
               <p class="label">Gold</p>
               <strong id="gold-value" class="counter">0</strong>
             </article>
@@ -125,7 +125,7 @@
                   <option value="recent">Récentes</option>
                   <option value="az">A–Z</option>
                   <option value="xpDesc">XP décroissant</option>
-                  <option value="goldDesc">Gold décroissant</option>
+                  <option id="sort-gold-desc-option" value="goldDesc">Gold décroissant</option>
                 </select>
               </label>
               <p id="catalog-filter-pill" class="filter-pill" aria-live="polite"></p>
@@ -190,6 +190,37 @@
               </label>
             </div>
             <p id="vacation-remaining-label" class="progress-subtext">Vacances restantes : 0</p>
+          </article>
+
+          <article class="card settings-section" aria-labelledby="settings-economy-title">
+            <h3 id="settings-economy-title">Économie</h3>
+            <div class="settings-row">
+              <label class="toggle-field" for="economy-gold-toggle">
+                <span>Gold activé :</span>
+                <input id="economy-gold-toggle" type="checkbox" role="switch" />
+                <strong id="economy-gold-state">ON</strong>
+              </label>
+            </div>
+            <div class="settings-row">
+              <label class="control-field" for="economy-xp-cap-range">Cap XP / jour
+                <input id="economy-xp-cap-range" type="range" min="20" max="400" step="5" value="120" />
+              </label>
+              <strong id="economy-xp-cap-value">120 XP</strong>
+            </div>
+            <div class="settings-row" id="economy-gold-cap-row">
+              <label class="control-field" for="economy-gold-cap-range">Cap Gold / jour
+                <input id="economy-gold-cap-range" type="range" min="0" max="250" step="5" value="60" />
+              </label>
+              <strong id="economy-gold-cap-value">60 Gold</strong>
+            </div>
+            <div class="settings-row settings-presets" role="group" aria-label="Preset lissage">
+              <span class="label">Lissage :</span>
+              <div class="preset-actions">
+                <button type="button" class="btn btn-ghost" data-economy-preset="relax">Relax</button>
+                <button type="button" class="btn btn-ghost" data-economy-preset="standard">Standard</button>
+                <button type="button" class="btn btn-ghost" data-economy-preset="strict">Strict</button>
+              </div>
+            </div>
           </article>
 
           <article id="developer-settings-section" class="card settings-section" aria-labelledby="settings-dev-title" hidden>
