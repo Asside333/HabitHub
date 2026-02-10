@@ -52,7 +52,10 @@ const PROGRESSION_CONFIG = {
 
 const ECONOMY_CONFIG = {
   mode: "balanced",
+  supportedModes: ["balanced", "raw"],
+  goldEnabledDefault: true,
   goldEnabled: true,
+  goldFromXpRatio: 0.25,
   smoothingPreset: "standard",
   smoothingPresets: {
     relax: { dailyXpCapBase: 180, dailyGoldCapBase: 90 },
@@ -63,13 +66,12 @@ const ECONOMY_CONFIG = {
     xp: { min: 20, max: 400, step: 5 },
     gold: { min: 0, max: 250, step: 5 },
   },
-  supportedModes: ["balanced", "raw"],
-  goldRewardMode: "table",
-  goldRatio: 0.5,
+  goldRewardMode: "ratio",
+  goldRatio: 0.25,
   dailyXpCapBase: 120,
-  dailyXpCapPerLevel: 3,
+  dailyXpCapPerLevel: 0,
   dailyGoldCapBase: 60,
-  dailyGoldCapPerLevel: 1,
+  dailyGoldCapPerLevel: 0,
   effortScale: {
     min: 1,
     max: 10,
@@ -88,7 +90,6 @@ const ECONOMY_CONFIG = {
     ],
   },
   effortXpTable: [6, 8, 10, 13, 16, 20, 25, 31, 38, 46],
-  effortGoldTable: [3, 4, 5, 7, 8, 10, 13, 16, 20, 24],
   economyAudit: {
     stableDaysToLevel: { min: 5, max: 14 },
     recommendation: {
