@@ -54,6 +54,12 @@ const ECONOMY_CONFIG = {
   mode: "balanced",
   goldEnabled: true,
   supportedModes: ["balanced", "raw"],
+  goldRewardMode: "table",
+  goldRatio: 0.5,
+  dailyXpCapBase: 120,
+  dailyXpCapPerLevel: 3,
+  dailyGoldCapBase: 60,
+  dailyGoldCapPerLevel: 1,
   effortScale: {
     min: 1,
     max: 10,

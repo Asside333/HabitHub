@@ -103,10 +103,10 @@
     if (!value || typeof value !== "object") return {};
     return Object.entries(value).reduce((acc, [key, claim]) => {
       if (typeof key !== "string" || !claim || typeof claim !== "object") return acc;
-      const xp = Math.max(0, Number(claim.xp) || 0);
-      const gold = Math.max(0, Number(claim.gold) || 0);
+      const xp = Math.max(0, Number(claim.xpGranted ?? claim.xp) || 0);
+      const gold = Math.max(0, Number(claim.goldGranted ?? claim.gold) || 0);
       const claimedAt = typeof claim.claimedAt === "string" ? claim.claimedAt : new Date().toISOString();
-      acc[key] = { claimedAt, xp, gold };
+      acc[key] = { claimedAt, xp, gold, xpGranted: xp, goldGranted: gold };
       return acc;
     }, {});
   }
@@ -876,25 +876,83 @@
     }, { xp: 0, gold: 0 });
   }
 
-  function applyDailyCaps(dateKey, xpWanted, goldWanted) {
-    const caps = PROGRESSION_CONFIG.antiExploit?.caps || {};
-    const capXpPerDay = Math.max(0, Math.floor(Number(caps.capXpPerDay) || 0));
-    const capGoldPerDay = Math.max(0, Math.floor(Number(caps.capGoldPerDay) || 0));
+  function getDailyCaps(level) {
+    const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
+    const levelOffset = Math.max(0, safeLevel - 1);
+    const fallbackCaps = PROGRESSION_CONFIG.antiExploit?.caps || {};
+    const capXpPerDay = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase ?? fallbackCaps.capXpPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapPerLevel) || 0)) * levelOffset));
+    const capGoldPerDay = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase ?? fallbackCaps.capGoldPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapPerLevel) || 0)) * levelOffset));
+    return { capXpPerDay, capGoldPerDay };
+  }
+
+  function applyDailyCaps(dateKey, xpWanted, goldWanted, level) {
+    const caps = getDailyCaps(level);
     const totals = getDailyRewardTotals(dateKey);
-    const xpRemaining = Math.max(0, capXpPerDay - totals.xp);
-    const goldRemaining = Math.max(0, capGoldPerDay - totals.gold);
-    const xpGranted = Math.max(0, Math.min(xpWanted, xpRemaining));
-    const goldGranted = Math.max(0, Math.min(goldWanted, goldRemaining));
+    const xpRemaining = Math.max(0, caps.capXpPerDay - totals.xp);
+    const goldRemaining = Math.max(0, caps.capGoldPerDay - totals.gold);
+    const xpGranted = Math.max(0, Math.min(Math.max(0, Math.floor(Number(xpWanted) || 0)), xpRemaining));
+    const goldGranted = Math.max(0, Math.min(Math.max(0, Math.floor(Number(goldWanted) || 0)), goldRemaining));
     return {
       xpGranted,
       goldGranted,
       xpRemaining,
       goldRemaining,
-      capXpPerDay,
-      capGoldPerDay,
+      capXpPerDay: caps.capXpPerDay,
+      capGoldPerDay: caps.capGoldPerDay,
       isCapReached: xpGranted === 0 && goldGranted === 0 && (xpWanted > 0 || goldWanted > 0),
       isPartial: xpGranted < xpWanted || goldGranted < goldWanted,
     };
+  }
+
+  function computeEffectiveReward(habit, gameState, dateKey) {
+    const effortScale = getEffortScaleConfig();
+    const effort = sanitizeEffort(habit?.effort, habit?.xp);
+    const tableIndex = clamp(effort - 1, 0, effortScale.max - 1);
+    const xpTable = Array.isArray(ECONOMY_CONFIG.effortXpTable) ? ECONOMY_CONFIG.effortXpTable : [];
+    const goldTable = Array.isArray(ECONOMY_CONFIG.effortGoldTable) ? ECONOMY_CONFIG.effortGoldTable : [];
+
+    const xpComputed = Math.max(0, Math.round(Number(xpTable[tableIndex]) || 0));
+    const goldMode = ECONOMY_CONFIG.goldRewardMode === "ratio" ? "ratio" : "table";
+    const goldComputedFromTable = Math.max(0, Math.round(Number(goldTable[tableIndex]) || 0));
+    const goldRatio = Math.max(0, Number(ECONOMY_CONFIG.goldRatio) || 0);
+    const ratioGold = Math.max(0, Math.round(xpComputed * goldRatio));
+    const goldComputedRaw = goldMode === "ratio" ? ratioGold : goldComputedFromTable;
+    const goldComputed = ECONOMY_CONFIG.goldEnabled === false ? 0 : goldComputedRaw;
+
+    const capResult = applyDailyCaps(dateKey, xpComputed, goldComputed, gameState?.level);
+
+    return {
+      xp: capResult.xpGranted,
+      gold: capResult.goldGranted,
+      meta: {
+        effort,
+        xpComputed,
+        goldComputed,
+        goldMode,
+        goldRatio,
+        xpRemainingBeforeClaim: capResult.xpRemaining,
+        goldRemainingBeforeClaim: capResult.goldRemaining,
+        capXpPerDay: capResult.capXpPerDay,
+        capGoldPerDay: capResult.capGoldPerDay,
+        isCapReached: capResult.isCapReached,
+        isPartial: capResult.isPartial,
+      },
+    };
+  }
+
+  function getRewardPreviewFromEffort(habit) {
+    const effortScale = getEffortScaleConfig();
+    const effort = sanitizeEffort(habit?.effort, habit?.xp);
+    const index = clamp(effort - 1, 0, effortScale.max - 1);
+    const xpTable = Array.isArray(ECONOMY_CONFIG.effortXpTable) ? ECONOMY_CONFIG.effortXpTable : [];
+    const goldTable = Array.isArray(ECONOMY_CONFIG.effortGoldTable) ? ECONOMY_CONFIG.effortGoldTable : [];
+    const xp = Math.max(0, Math.round(Number(xpTable[index]) || 0));
+    const goldMode = ECONOMY_CONFIG.goldRewardMode === "ratio" ? "ratio" : "table";
+    const goldRatio = Math.max(0, Number(ECONOMY_CONFIG.goldRatio) || 0);
+    const fromTable = Math.max(0, Math.round(Number(goldTable[index]) || 0));
+    const fromRatio = Math.max(0, Math.round(xp * goldRatio));
+    const gold = ECONOMY_CONFIG.goldEnabled === false ? 0 : (goldMode === "ratio" ? fromRatio : fromTable);
+    return { xp, gold };
   }
 
   function logEvent(type, payload) {
@@ -1194,42 +1252,39 @@
         return { applied: false, xpDelta: 0, goldDelta: 0, reason: "already_claimed" };
       }
 
-      const xpWanted = Math.max(0, Math.round(Number(params?.xp) || 0));
-      const goldWanted = Math.max(0, Math.round(Number(params?.gold) || 0));
-      const capResult = applyDailyCaps(dateKey, xpWanted, goldWanted);
-      const xpGain = capResult.xpGranted;
-      const goldGain = capResult.goldGranted;
+      const reward = computeEffectiveReward(params?.habit, state.game, dateKey);
+      const xpGain = Math.max(0, Math.floor(Number(reward.xp) || 0));
+      const goldGain = Math.max(0, Math.floor(Number(reward.gold) || 0));
 
       state.game.claims.rewardClaims[claimKey] = {
         claimedAt: new Date().toISOString(),
         xp: xpGain,
         gold: goldGain,
+        xpGranted: xpGain,
+        goldGranted: goldGain,
       };
 
       applyDelta(xpGain, goldGain);
-      logEvent("CLAIM", { actionId, dateKey, xpDelta: xpGain, goldDelta: goldGain, xpWanted, goldWanted });
+      logEvent("CLAIM", {
+        actionId,
+        dateKey,
+        xpDelta: xpGain,
+        goldDelta: goldGain,
+        xpComputed: reward.meta.xpComputed,
+        goldComputed: reward.meta.goldComputed,
+        effort: reward.meta.effort,
+      });
 
-      if (capResult.isPartial) {
+      if (reward.meta.isPartial) {
         logEvent("CAP_APPLIED", {
           actionId,
           dateKey,
-          xpWanted,
-          goldWanted,
+          xpComputed: reward.meta.xpComputed,
+          goldComputed: reward.meta.goldComputed,
           xpGranted: xpGain,
           goldGranted: goldGain,
-          capXpPerDay: capResult.capXpPerDay,
-          capGoldPerDay: capResult.capGoldPerDay,
-        });
-      }
-
-      if (xpGain < xpWanted || goldGain < goldWanted) {
-        logEvent("CLAIM_PARTIAL", {
-          actionId,
-          dateKey,
-          xpWanted,
-          goldWanted,
-          xpGranted: xpGain,
-          goldGranted: goldGain,
+          capXpPerDay: reward.meta.capXpPerDay,
+          capGoldPerDay: reward.meta.capGoldPerDay,
         });
       }
 
@@ -1237,7 +1292,7 @@
         applied: true,
         xpDelta: xpGain,
         goldDelta: goldGain,
-        reason: capResult.isCapReached ? "cap_reached" : (capResult.isPartial ? "claim_partial" : "claimed"),
+        reason: reward.meta.isCapReached ? "cap_reached" : (reward.meta.isPartial ? "claim_partial" : "claimed"),
       };
     }
 
@@ -1245,8 +1300,8 @@
       return { applied: false, xpDelta: 0, goldDelta: 0, reason: "missing_claim" };
     }
 
-    const xpRollback = Math.max(0, Number(existingClaim.xp) || 0);
-    const goldRollback = Math.max(0, Number(existingClaim.gold) || 0);
+    const xpRollback = Math.max(0, Number(existingClaim.xpGranted ?? existingClaim.xp) || 0);
+    const goldRollback = Math.max(0, Number(existingClaim.goldGranted ?? existingClaim.gold) || 0);
     applyDelta(-xpRollback, -goldRollback);
     delete state.game.claims.rewardClaims[claimKey];
     logEvent("ROLLBACK", { actionId, dateKey, xpDelta: -xpRollback, goldDelta: -goldRollback });
@@ -1285,16 +1340,17 @@
       rewardResult = claimReward({
         actionId: quest.id,
         dateKey,
-        xp: quest.xp,
-        gold: quest.gold,
+        habit: quest,
         mode: "claim",
       });
       if (rewardResult.applied) {
         ui.lastCompletedQuestId = questId;
         if (rewardResult.reason === "cap_reached") {
-          ui.showToast("warn", "Cap atteint", "0 gain pour aujourd'hui.");
+          ui.showToast("info", "Cap atteint", "0 gain pour aujourd'hui.");
           haptics.error();
           audioFx.play("pop");
+        } else if (rewardResult.reason === "claim_partial") {
+          ui.showToast("info", "Quête validée (cap)", `+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
         } else {
           ui.showToast("success", "Quête validée", `+${rewardResult.xpDelta} XP • +${rewardResult.goldDelta} Gold`);
         }
@@ -1409,7 +1465,7 @@
           <div class="quest-copy">
             <p class="quest-title">${quest.title}</p>
             <p class="quest-subtitle">${isCompleted ? "Quête complétée" : "Objectif quotidien"}</p>
-            <div class="reward-chips"><span class="chip chip-xp">+${quest.xp} XP</span><span class="chip chip-gold">+${quest.gold} Gold</span></div>
+            <div class="reward-chips"><span class="chip chip-xp">+${getRewardPreviewFromEffort(quest).xp} XP</span><span class="chip chip-gold">+${getRewardPreviewFromEffort(quest).gold} Gold</span></div>
           </div>
         </div>
         <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>
@@ -1517,7 +1573,7 @@
           <div class="quest-icon">${catalog.getIcon(quest.icon).svg}</div>
           <div>
             <p class="quest-title">${quest.title}</p>
-            <div class="reward-chips"><span class="chip chip-xp">+${quest.xp} XP</span><span class="chip chip-gold">+${quest.gold} Gold</span></div>
+            <div class="reward-chips"><span class="chip chip-xp">+${getRewardPreviewFromEffort(quest).xp} XP</span><span class="chip chip-gold">+${getRewardPreviewFromEffort(quest).gold} Gold</span></div>
             <div class="reward-chips"><span class="chip ${quest.source === "seed" ? "chip-seed" : "chip-custom"}">${quest.source === "seed" ? "Seed" : "Custom"}</span><span class="chip ${quest.isHidden ? "chip-hidden" : "chip-visible"}">${quest.isHidden ? "Masquée" : "Visible"}</span>${quest.hasOverride ? '<span class="chip chip-override">Modifiée</span>' : ""}</div>
           </div>
         </div>
@@ -1601,7 +1657,6 @@
         const index = state.customQuests.findIndex((entry) => entry.id === quest.id);
         const oldQuest = state.customQuests[index];
         state.customQuests[index] = { ...oldQuest, ...payload };
-        if (state.game.completedQuestIds.includes(quest.id)) applyDelta(payload.xp - oldQuest.xp, payload.gold - oldQuest.gold);
       } else {
         setOverride(quest.id, payload);
       }
