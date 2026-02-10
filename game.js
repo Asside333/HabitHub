@@ -1523,18 +1523,30 @@
     return typeof labels[index] === "string" && labels[index].trim() ? labels[index] : fallback;
   }
 
-  function updateEditorEffortUi() {
-    if (!ui.refs.editorEffort) return;
-    const effort = sanitizeEffort(ui.refs.editorEffort.value);
-    ui.refs.editorEffort.value = String(effort);
+  function updateEffortPreview(source) {
+    const slider = source || ui.refs.editorEffort;
+    if (!slider) return;
+
+    const effort = sanitizeEffort(slider.value);
+    slider.value = String(effort);
+    if (ui.refs.editorEffort && ui.refs.editorEffort !== slider) {
+      ui.refs.editorEffort.value = slider.value;
+    }
+
     const reward = computeEffectiveReward({ effort }, state.game, getActiveDateIso(), { preview: true });
     const scale = getEffortScaleConfig();
-    ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
-    ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
-      ? `Gains effectifs : +${reward.xp} XP`
-      : `Gains effectifs : ${formatRewardText(reward.xp, reward.gold, true)}`;
+
+    if (ui.refs.editorEffortLabel) {
+      ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
+    }
+    if (ui.refs.editorRewardPreview) {
+      ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
+        ? `Gains effectifs : +${reward.xp} XP`
+        : `Gains effectifs : ${formatRewardText(reward.xp, reward.gold, true)}`;
+    }
+
     const ratio = ((effort - scale.min) / Math.max(1, scale.max - scale.min)) * 100;
-    ui.refs.editorEffort.style.setProperty("--range-progress", `${clamp(ratio, 0, 100)}%`);
+    slider.style.setProperty("--range-progress", `${clamp(ratio, 0, 100)}%`);
   }
 
   function logEvent(type, payload) {
@@ -2455,7 +2467,7 @@
     ui.refs.editorError.textContent = "";
     ui.refs.editorModal.hidden = false;
     document.body.classList.add("modal-open");
-    updateEditorEffortUi();
+    updateEffortPreview();
     renderIconGrid();
   }
 
@@ -2467,6 +2479,7 @@
 
   function validateEditorForm() {
     const title = sanitizeTitle(ui.refs.editorName.value);
+    updateEffortPreview();
     const effort = sanitizeEffort(ui.refs.editorEffort.value);
     const reward = computeEffectiveReward({ effort }, state.game, getActiveDateIso(), { preview: true });
     if (title.length < 2 || title.length > 40) return { error: "Le nom doit faire entre 2 et 40 caractères." };
@@ -3117,10 +3130,18 @@
       renderIconGrid();
     });
 
-    ui.refs.editorEffort.addEventListener("input", () => {
-      updateEditorEffortUi();
-      haptics.tap();
-    });
+    if (!ui.refs.editorForm.dataset.effortBindingReady) {
+      ui.refs.editorForm.addEventListener("input", (event) => {
+        const slider = event.target.closest("[data-role='effort-slider']");
+        if (!slider) return;
+        updateEffortPreview(slider);
+        haptics.tap();
+      });
+      ui.refs.editorForm.dataset.effortBindingReady = "1";
+      if (state.settings.developerModeEnabled || state.settings.advancedModeEnabled) {
+        console.debug("[HabitHub] effort slider binding ready");
+      }
+    }
 
     ui.refs.iconGrid.addEventListener("click", (event) => {
       const button = event.target.closest("[data-icon]");

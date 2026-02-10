@@ -137,3 +137,20 @@
 - [x] DevTools console: no errors during smoke.
 - [x] Install path still available when browser supports prompt (icon may be generic).
 - [x] Offline after first load: app opens.
+
+## Follow-up fix — Effort slider live preview (Fix-01 + Fix-02)
+### What changed (Fix-01)
+- Restored live preview update for effort slider in create/edit modal using a single preview updater (`updateEffortPreview`) based on the existing reward computation logic.
+- Ensured preview initializes immediately when opening create mode and edit mode.
+- Added slider marker (`data-role="effort-slider"`) for stable targeting.
+
+### What changed (Fix-02)
+- Hardened binding against rerenders by switching to a guarded form-level `input` listener (`dataset.effortBindingReady`) instead of direct element-only binding.
+- Added optional one-time debug log in advanced/developer mode only.
+
+### Manual Tests (Fix-01 + Fix-02)
+- [x] Open “Nouvelle habitude”: preview value appears immediately.
+- [x] Drag effort slider min->max: preview updates at each movement (`input`).
+- [x] Save then reopen in edit: effort and preview stay consistent.
+- [x] Open/close editor repeatedly + tab navigation + reopen: preview still updates, no listener stacking symptoms.
+- [x] Console: 0 error during smoke run.
