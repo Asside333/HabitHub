@@ -163,6 +163,7 @@
       <section id="tab-settings" data-tab-panel="settings" hidden>
         <section class="card settings-panel" aria-labelledby="settings-title">
           <h2 id="settings-title">Réglages</h2>
+          <p class="progress-subtext">Beta Test 1</p>
 
           <article class="card settings-section" aria-labelledby="settings-general-title">
             <h3 id="settings-general-title">Général</h3>
@@ -248,6 +249,48 @@
             </section>
           </article>
 
+
+          <article class="card settings-section" aria-labelledby="settings-backup-title">
+            <h3 id="settings-backup-title">Sauvegarde (Beta 1)</h3>
+            <p class="progress-subtext">Téléphone → PC : exporte sur téléphone puis importe sur PC.</p>
+            <ol class="progress-subtext">
+              <li>Sur téléphone, clique sur “Télécharger sauvegarde (.json)”.</li>
+              <li>Transfère le fichier sur ton PC.</li>
+              <li>Sur PC, choisis le fichier puis clique “Importer”.</li>
+            </ol>
+            <div class="settings-actions">
+              <button id="backup-export-json-btn" class="btn btn-primary" type="button">Télécharger sauvegarde (.json)</button>
+            </div>
+            <div class="settings-row">
+              <label class="control-field" for="backup-import-file-input">Importer un fichier JSON
+                <input id="backup-import-file-input" type="file" accept="application/json,.json" />
+              </label>
+              <button id="backup-import-json-btn" class="btn btn-ghost" type="button">Importer</button>
+            </div>
+            <div class="settings-actions">
+              <button id="backup-copy-code-btn" class="btn btn-ghost" type="button">Copier un code</button>
+            </div>
+            <label class="control-field" for="backup-code-input">Coller un code
+              <textarea id="backup-code-input" rows="4" placeholder="Colle ici ton code de sauvegarde"></textarea>
+            </label>
+            <div class="settings-actions">
+              <button id="backup-restore-code-btn" class="btn btn-primary" type="button">Restaurer</button>
+            </div>
+
+            <details class="settings-row">
+              <summary>Annexe (expérimental) : QR</summary>
+              <p class="progress-subtext">Si la sauvegarde est trop volumineuse, utilise JSON ou Code.</p>
+              <div class="settings-actions">
+                <button id="backup-show-qr-btn" class="btn btn-ghost" type="button">Afficher QR d’export</button>
+              </div>
+              <p id="backup-qr-status" class="progress-subtext">QR non généré.</p>
+              <div class="settings-actions">
+                <button id="backup-scan-qr-btn" class="btn btn-ghost" type="button">Scanner un QR</button>
+              </div>
+              <p id="backup-qr-scan-status" class="progress-subtext">Scan non supporté sur ce navigateur.</p>
+              <canvas id="backup-qr-canvas" hidden aria-label="QR export"></canvas>
+            </details>
+          </article>
           <article id="developer-settings-section" class="card settings-section" aria-labelledby="settings-dev-title" hidden>
             <h3 id="settings-dev-title">Développeur</h3>
             <div class="settings-row">
@@ -301,6 +344,18 @@
       </aside>
     </div>
 
+
+    <div id="qr-scan-modal" class="editor-modal" hidden>
+      <div id="qr-scan-backdrop" class="editor-backdrop"></div>
+      <aside class="editor-panel" role="dialog" aria-modal="true" aria-labelledby="qr-scan-title">
+        <h3 id="qr-scan-title">Scanner un QR (expérimental)</h3>
+        <video id="qr-scan-video" autoplay playsinline muted style="width:100%;border-radius:12px;background:#000;"></video>
+        <div class="form-actions">
+          <button id="qr-scan-close-btn" class="btn btn-ghost" type="button">Fermer</button>
+        </div>
+      </aside>
+    </div>
+
     <div id="level-up-overlay" class="level-up-overlay" hidden>
       <div class="level-up-modal" role="dialog" aria-modal="true" aria-labelledby="level-up-title" aria-describedby="level-up-message">
         <p id="level-up-title" class="hero-kicker">LEVEL UP</p>
@@ -313,6 +368,7 @@
 
     <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="false"></div>
     <script src="data.js"></script>
+    <script src="vendor/qrcodegen.js"></script>
     <script src="game.js"></script>
   </body>
 </html>
