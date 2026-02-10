@@ -53,8 +53,8 @@ const PROGRESSION_CONFIG = {
 const ECONOMY_CONFIG = {
   mode: "balanced",
   supportedModes: ["balanced", "raw"],
-  goldEnabledDefault: true,
-  goldEnabled: true,
+  goldEnabledDefault: false,
+  goldEnabled: false,
   goldFromXpRatio: 0.25,
   smoothingPreset: "standard",
   smoothingPresets: {
@@ -99,6 +99,12 @@ const ECONOMY_CONFIG = {
       roundTo: 5,
     },
   },
+};
+
+
+const LEVELING_CONFIG = {
+  baseXpToLevel2: 120,
+  growth: 1.3,
 };
 
 const INITIAL_GAME_STATE = {
@@ -198,6 +204,8 @@ HRPG.CONFIG = {
     { key: "star", label: "Favori", svg: '<svg viewBox="0 0 24 24"><path d="M12 2 9.3 8.2 2.5 9l5 4.5L6.3 21 12 17.7 17.7 21l-1.2-7.5 5-4.5-6.8-.8z"/></svg>' },
   ],
   progressionConfig: PROGRESSION_CONFIG,
+  levelingConfig: LEVELING_CONFIG,
+  features: { goldEnabled: false },
   economyConfig: ECONOMY_CONFIG,
   initialGameState: INITIAL_GAME_STATE,
   initialState: { xp: 0, totalXp: 0, level: 1, gold: 0, completedQuestIds: [] },
