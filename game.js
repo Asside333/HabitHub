@@ -273,6 +273,16 @@
       if (save && typeof save === "object") {
         const schemaVersion = clamp(Math.floor(Number(save.schemaVersion) || 1), 1, 999);
         const migrated = this.migrateState(save.state, schemaVersion);
+        const hadState = save.state && typeof save.state === "object";
+        const stateChanged = hadState ? JSON.stringify(save.state) !== JSON.stringify(migrated) : true;
+        const metadataChanged = Number(save.schemaVersion) !== migrated.v || typeof save.updatedAt !== "string";
+        if (stateChanged || metadataChanged) {
+          this.saveJson(this.keys.save, {
+            schemaVersion: migrated.v,
+            updatedAt: new Date().toISOString(),
+            state: migrated,
+          });
+        }
         return migrated;
       }
 
@@ -306,7 +316,10 @@
         .map((entry) => {
           const normalized = sanitizeQuest(entry);
           if (!normalized) return null;
-          if (entry.effort === undefined || Number(entry.effort) !== normalized.effort) hasMigration = true;
+          const sourceEffort = Number(entry.effort);
+          const effortNeedsMigration = entry.effort === undefined || !Number.isInteger(sourceEffort) || sourceEffort !== normalized.effort;
+          const rewardInputNeedsMigration = entry.rewardInput !== undefined && JSON.stringify(entry.rewardInput) !== JSON.stringify(normalized.rewardInput);
+          if (effortNeedsMigration || rewardInputNeedsMigration) hasMigration = true;
           return normalized;
         })
         .filter(Boolean);
@@ -333,7 +346,7 @@
         if (typeof id !== "string") return acc;
         const normalized = sanitizeQuestOverride(override);
         if (!Object.keys(normalized).length) return acc;
-        if (override?.effort === undefined && normalized.effort !== undefined) hasMigration = true;
+        if (JSON.stringify(override) !== JSON.stringify(normalized)) hasMigration = true;
         acc[id] = normalized;
         return acc;
       }, {});
