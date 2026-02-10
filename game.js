@@ -492,8 +492,9 @@
         editorTitle: document.getElementById("editor-title"),
         editorForm: document.getElementById("quest-editor-form"),
         editorName: document.getElementById("editor-title-input"),
-        editorXp: document.getElementById("editor-xp-input"),
-        editorGold: document.getElementById("editor-gold-input"),
+        editorEffort: document.getElementById("editor-effort-input"),
+        editorEffortLabel: document.getElementById("editor-effort-label"),
+        editorRewardPreview: document.getElementById("editor-reward-preview"),
         iconSearch: document.getElementById("icon-search-input"),
         iconGrid: document.getElementById("icon-grid"),
         editorError: document.getElementById("editor-error"),
@@ -953,6 +954,29 @@
     const fromRatio = Math.max(0, Math.round(xp * goldRatio));
     const gold = ECONOMY_CONFIG.goldEnabled === false ? 0 : (goldMode === "ratio" ? fromRatio : fromTable);
     return { xp, gold };
+  }
+
+  function getEffortLabel(effort) {
+    const scale = getEffortScaleConfig();
+    const safeEffort = sanitizeEffort(effort);
+    const labels = Array.isArray(ECONOMY_CONFIG?.effortScale?.labels) ? ECONOMY_CONFIG.effortScale.labels : [];
+    const index = clamp(safeEffort - scale.min, 0, Math.max(0, labels.length - 1));
+    const fallback = safeEffort >= 9 ? "Boss" : (safeEffort >= 7 ? "Difficile" : (safeEffort >= 4 ? "Moyen" : "Facile"));
+    return typeof labels[index] === "string" && labels[index].trim() ? labels[index] : fallback;
+  }
+
+  function updateEditorEffortUi() {
+    if (!ui.refs.editorEffort) return;
+    const effort = sanitizeEffort(ui.refs.editorEffort.value);
+    ui.refs.editorEffort.value = String(effort);
+    const reward = getRewardPreviewFromEffort({ effort });
+    const scale = getEffortScaleConfig();
+    ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
+    ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
+      ? `Gains effectifs : +${reward.xp} XP`
+      : `Gains effectifs : +${reward.xp} XP • +${reward.gold} Gold`;
+    const ratio = ((effort - scale.min) / Math.max(1, scale.max - scale.min)) * 100;
+    ui.refs.editorEffort.style.setProperty("--range-progress", `${clamp(ratio, 0, 100)}%`);
   }
 
   function logEvent(type, payload) {
@@ -1553,8 +1577,8 @@
 
     const sorted = [...filtered];
     if (ui.createSort === "az") sorted.sort((a, b) => a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
-    if (ui.createSort === "xpDesc") sorted.sort((a, b) => b.xp - a.xp || a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
-    if (ui.createSort === "goldDesc") sorted.sort((a, b) => b.gold - a.gold || a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
+    if (ui.createSort === "xpDesc") sorted.sort((a, b) => getRewardPreviewFromEffort(b).xp - getRewardPreviewFromEffort(a).xp || a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
+    if (ui.createSort === "goldDesc") sorted.sort((a, b) => getRewardPreviewFromEffort(b).gold - getRewardPreviewFromEffort(a).gold || a.title.localeCompare(b.title, "fr", { sensitivity: "base" }));
     if (ui.createSort === "recent") sorted.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     return sorted;
   }
@@ -1604,16 +1628,19 @@
   function openQuestEditor(mode, questId) {
     ui.editor = { ...ui.editor, open: true, mode, questId: questId || null, icon: ICON_CATALOG[0].key };
     const quest = questId ? getQuestById(questId) : null;
+    const effortScale = getEffortScaleConfig();
     ui.refs.editorTitle.textContent = mode === "create" ? "Nouvelle habitude" : `Éditer: ${quest.title}`;
     ui.refs.editorName.value = quest ? quest.title : "";
-    ui.refs.editorXp.value = quest ? String(quest.xp) : "10";
-    ui.refs.editorGold.value = quest ? String(quest.gold) : "5";
+    ui.refs.editorEffort.min = String(effortScale.min);
+    ui.refs.editorEffort.max = String(effortScale.max);
+    ui.refs.editorEffort.value = String(quest ? sanitizeEffort(quest.effort, quest.xp) : effortScale.defaultEffort);
     ui.editor.icon = quest ? quest.icon : ICON_CATALOG[0].key;
     ui.refs.editorRestore.hidden = !(quest && quest.hasOverride);
     ui.refs.editorDelete.hidden = !(quest && quest.source === "custom");
     ui.refs.editorError.textContent = "";
     ui.refs.editorModal.hidden = false;
     document.body.classList.add("modal-open");
+    updateEditorEffortUi();
     renderIconGrid();
   }
 
@@ -1625,12 +1652,10 @@
 
   function validateEditorForm() {
     const title = sanitizeTitle(ui.refs.editorName.value);
-    const xp = Number(ui.refs.editorXp.value);
-    const gold = Number(ui.refs.editorGold.value);
+    const effort = sanitizeEffort(ui.refs.editorEffort.value);
+    const reward = getRewardPreviewFromEffort({ effort });
     if (title.length < 2 || title.length > 40) return { error: "Le nom doit faire entre 2 et 40 caractères." };
-    if (!Number.isInteger(xp) || xp < 1 || xp > 200) return { error: "XP doit être un entier entre 1 et 200." };
-    if (!Number.isInteger(gold) || gold < 0 || gold > 200) return { error: "Gold doit être un entier entre 0 et 200." };
-    return { value: { title, xp, gold, icon: ui.editor.icon } };
+    return { value: { title, effort, xp: reward.xp, gold: reward.gold, icon: ui.editor.icon } };
   }
 
   function saveEditor() {
@@ -1962,6 +1987,11 @@
     ui.refs.iconSearch.addEventListener("input", () => {
       ui.iconSearch = ui.refs.iconSearch.value;
       renderIconGrid();
+    });
+
+    ui.refs.editorEffort.addEventListener("input", () => {
+      updateEditorEffortUi();
+      haptics.tap();
     });
 
     ui.refs.iconGrid.addEventListener("click", (event) => {

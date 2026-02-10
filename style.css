@@ -977,6 +977,77 @@ body.reduce-motion .xp-hero-fill {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+
+.effort-field {
+  display: grid;
+  gap: 0.45rem;
+  padding: var(--space-12);
+  border: 1px solid rgba(198, 220, 255, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(17, 36, 85, 0.55);
+}
+
+.form-field .effort-range {
+  --range-progress: 44%;
+  min-height: 56px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: #58cc6c;
+  touch-action: pan-x;
+}
+
+.effort-range::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #58cc6c var(--range-progress), rgba(124, 166, 255, 0.35) var(--range-progress));
+}
+
+.effort-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: #f4f9ff;
+  box-shadow: 0 0 0 4px rgba(88, 204, 108, 0.2);
+}
+
+.effort-range::-moz-range-track {
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(124, 166, 255, 0.35);
+}
+
+.effort-range::-moz-range-progress {
+  height: 14px;
+  border-radius: 999px;
+  background: #58cc6c;
+}
+
+.effort-range::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: #f4f9ff;
+  box-shadow: 0 0 0 4px rgba(88, 204, 108, 0.2);
+}
+
+.effort-label,
+.effort-preview {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #dce8ff;
+}
+
+.effort-preview {
+  color: #c6f6d4;
+  font-weight: 700;
+}
+
 .form-field {
   display: grid;
   gap: 0.35rem;
