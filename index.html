@@ -225,9 +225,12 @@
         <h3 id="editor-title">Nouvelle habitude</h3>
         <form id="quest-editor-form" class="quest-form" novalidate>
           <label class="form-field">Nom<input id="editor-title-input" type="text" minlength="2" maxlength="40" required /></label>
-          <div class="form-grid">
-            <label class="form-field">XP<input id="editor-xp-input" type="number" min="1" max="200" required /></label>
-            <label class="form-field">Gold<input id="editor-gold-input" type="number" min="0" max="200" required /></label>
+          <div class="effort-field">
+            <label class="form-field" for="editor-effort-input">Effort
+              <input id="editor-effort-input" class="effort-range" type="range" min="1" max="10" step="1" value="5" />
+            </label>
+            <p id="editor-effort-label" class="effort-label" aria-live="polite">Moyen</p>
+            <p id="editor-reward-preview" class="effort-preview" aria-live="polite">Gains effectifs : +0 XP • +0 Gold</p>
           </div>
           <label class="form-field">Rechercher une icône<input id="icon-search-input" type="search" placeholder="Ex: eau, sport..." /></label>
           <div id="icon-grid" class="icon-grid" role="listbox" aria-label="Choix d'icône"></div>
