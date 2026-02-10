@@ -290,6 +290,8 @@
       quests: {
         completedQuestIds,
       },
+      economyVersion: Math.max(1, Math.floor(Number(rawState.economyVersion) || 1)),
+      economySnapshot: rawState.economySnapshot && typeof rawState.economySnapshot === "object" ? rawState.economySnapshot : {},
       claims: {
         rewardClaims: sanitizeRewardClaims(rawState.claims?.rewardClaims),
         tierClaims: rawState.claims?.tierClaims && typeof rawState.claims.tierClaims === "object" ? rawState.claims.tierClaims : {},
@@ -315,7 +317,7 @@
 
   function toPersistedGameState(gameState) {
     const normalized = normalizeGameState(gameState);
-    normalized.v = 1;
+    normalized.v = STATE_SCHEMA_VERSION;
     normalized.currencies.xp = clamp(Number(normalized.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
     normalized.currencies.gold = clamp(Number(normalized.gold) || 0, 0, Number.MAX_SAFE_INTEGER);
     normalized.currencies.totalXp = clamp(Number(normalized.totalXp) || 0, 0, Number.MAX_SAFE_INTEGER);
@@ -324,6 +326,8 @@
     normalized.completedQuestIds = normalized.quests.completedQuestIds;
     normalized.logs.eventLog = sanitizeEventLog(normalized.logs.eventLog);
     normalized.claims.rewardClaims = sanitizeRewardClaims(normalized.claims.rewardClaims);
+    normalized.economyVersion = Math.max(1, Math.floor(Number(normalized.economyVersion) || 1));
+    normalized.economySnapshot = normalized.economySnapshot && typeof normalized.economySnapshot === "object" ? normalized.economySnapshot : {};
     normalized.daily = sanitizeDailyState(normalized.daily);
     normalized.progress.streakShield = Math.max(0, Math.min(1, Number(normalized.progress.streakShield) || 0));
     normalized.progress.restDaysUsedByWeek = normalized.progress.restDaysUsedByWeek && typeof normalized.progress.restDaysUsedByWeek === "object" ? normalized.progress.restDaysUsedByWeek : {};
@@ -332,11 +336,41 @@
     return normalized;
   }
 
+  const STATE_SCHEMA_VERSION = 1;
+
+  function isFiniteNumber(value) {
+    return Number.isFinite(Number(value));
+  }
+
+  function validateState(candidate) {
+    const errors = [];
+    if (!candidate || typeof candidate !== "object") {
+      return { ok: false, errors: ["state_not_object"] };
+    }
+    const stateValue = normalizeGameState(candidate);
+    if (!Number.isInteger(stateValue.v) || stateValue.v < 1) errors.push("invalid_version");
+    if (!isFiniteNumber(stateValue.xp) || stateValue.xp < 0) errors.push("invalid_xp");
+    if (!isFiniteNumber(stateValue.totalXp) || stateValue.totalXp < 0) errors.push("invalid_total_xp");
+    if (!isFiniteNumber(stateValue.gold) || stateValue.gold < 0) errors.push("invalid_gold");
+    if (!isFiniteNumber(stateValue.level) || stateValue.level < 1) errors.push("invalid_level");
+    if (!stateValue.quests || !Array.isArray(stateValue.quests.completedQuestIds)) errors.push("invalid_habits_list");
+    if (!stateValue.claims || typeof stateValue.claims !== "object" || !stateValue.claims.rewardClaims || typeof stateValue.claims.rewardClaims !== "object") {
+      errors.push("invalid_reward_claims");
+    }
+    if (!stateValue.daily || typeof stateValue.daily !== "object") errors.push("invalid_daily");
+    return {
+      ok: errors.length === 0,
+      value: stateValue,
+      errors,
+    };
+  }
+
   // === SECTION: State persistence (load/save/migrations) ===
   const storage = {
     hasPendingCatalogMigration: false,
     keys: {
       save: "habitrpg.save",
+      saveTemp: "habitrpg.save.tmp",
       legacyState: "habithub-state-v2",
       oldLegacyState: "habithub-state-v1",
       custom: "habithub-quests-custom-v1",
@@ -344,6 +378,8 @@
       overrides: "habithub-quests-overrides-v1",
       settings: "habithub-settings-v1",
       createUi: "habithub-ui-create-filter-v1",
+      corruptPrefix: "corrupt_backup_",
+      importBackupPrefix: "backup_before_import_",
     },
     loadJson(key, fallback) {
       const raw = localStorage.getItem(key);
@@ -357,46 +393,101 @@
     saveJson(key, value) {
       localStorage.setItem(key, JSON.stringify(value));
     },
-    migrateStateVersion(stateValue, fromVersion) {
-      const normalized = normalizeGameState(stateValue);
-      const safeFromVersion = clamp(Math.floor(Number(fromVersion) || 1), 1, 999);
-      if (safeFromVersion <= 1) return { ...normalized, v: 1 };
-      return { ...normalized, v: 1 };
+    stateMigrations: {
+      1: (stateValue) => ({ ...normalizeGameState(stateValue), v: 1 }),
+    },
+    rotatePrefixedBackups(prefix, max) {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(prefix)) keys.push(key);
+      }
+      keys
+        .sort((a, b) => {
+          const aTs = Number(a.slice(prefix.length)) || 0;
+          const bTs = Number(b.slice(prefix.length)) || 0;
+          return bTs - aTs;
+        })
+        .slice(max)
+        .forEach((key) => localStorage.removeItem(key));
+    },
+    backupCorruptPayload(payload, reason) {
+      const ts = Date.now();
+      this.saveJson(`${this.keys.corruptPrefix}${ts}`, {
+        reason,
+        createdAt: new Date(ts).toISOString(),
+        payload,
+      });
+      this.rotatePrefixedBackups(this.keys.corruptPrefix, 2);
     },
     migrateState(oldState, fromVersion = 1) {
-      return this.migrateStateVersion(oldState, fromVersion);
+      let next = oldState;
+      let currentVersion = clamp(Math.floor(Number(fromVersion) || 1), 1, 999);
+      while (currentVersion < STATE_SCHEMA_VERSION) {
+        const migrate = this.stateMigrations[currentVersion];
+        next = typeof migrate === "function" ? migrate(next) : next;
+        currentVersion += 1;
+      }
+      const normalized = normalizeGameState(next);
+      normalized.v = STATE_SCHEMA_VERSION;
+      return normalized;
+    },
+    saveEnvelopeAtomically(envelope) {
+      this.saveJson(this.keys.saveTemp, envelope);
+      localStorage.setItem(this.keys.save, localStorage.getItem(this.keys.saveTemp) || JSON.stringify(envelope));
+      localStorage.removeItem(this.keys.saveTemp);
+    },
+    backupBeforeImport(stateValue) {
+      const ts = Date.now();
+      this.saveJson(`${this.keys.importBackupPrefix}${ts}`, {
+        schemaVersion: STATE_SCHEMA_VERSION,
+        updatedAt: new Date(ts).toISOString(),
+        state: toPersistedGameState(stateValue),
+      });
+      this.rotatePrefixedBackups(this.keys.importBackupPrefix, 3);
     },
     loadState() {
       const save = this.loadJson(this.keys.save, null);
-      if (save && typeof save === "object") {
+      if (save && typeof save === "object" && save.state && typeof save.state === "object") {
         const schemaVersion = clamp(Math.floor(Number(save.schemaVersion) || 1), 1, 999);
         const migrated = this.migrateState(save.state, schemaVersion);
-        const hadState = save.state && typeof save.state === "object";
-        const stateChanged = hadState ? JSON.stringify(save.state) !== JSON.stringify(migrated) : true;
-        const metadataChanged = Number(save.schemaVersion) !== migrated.v || typeof save.updatedAt !== "string";
-        if (stateChanged || metadataChanged) {
-          this.saveJson(this.keys.save, {
-            schemaVersion: migrated.v,
-            updatedAt: new Date().toISOString(),
-            state: migrated,
-          });
+        const validation = validateState(migrated);
+        if (validation.ok) {
+          const safeState = validation.value;
+          const metadataChanged = Number(save.schemaVersion) !== safeState.v || typeof save.updatedAt !== "string";
+          if (metadataChanged || JSON.stringify(save.state) !== JSON.stringify(safeState)) {
+            this.saveEnvelopeAtomically({
+              schemaVersion: safeState.v,
+              updatedAt: new Date().toISOString(),
+              state: safeState,
+            });
+          }
+          return safeState;
         }
-        return migrated;
+        this.backupCorruptPayload(save, validation.errors);
+        return createInitialGameState();
       }
 
       const legacy = this.loadJson(this.keys.legacyState, null) ?? this.loadJson(this.keys.oldLegacyState, null);
       if (legacy && typeof legacy === "object") {
-        return this.migrateState(legacy);
+        const migratedLegacy = this.migrateState(legacy, 1);
+        const validation = validateState(migratedLegacy);
+        if (validation.ok) return validation.value;
+        this.backupCorruptPayload(legacy, validation.errors);
+        return createInitialGameState();
       }
       return createInitialGameState();
     },
     saveState(gameState) {
       const next = toPersistedGameState(gameState);
       assertState(next);
-      this.saveJson(this.keys.save, {
-        schemaVersion: next.v,
+      const validation = validateState(next);
+      const safeState = validation.ok ? validation.value : createInitialGameState();
+      if (!validation.ok) this.backupCorruptPayload(next, validation.errors);
+      this.saveEnvelopeAtomically({
+        schemaVersion: safeState.v,
         updatedAt: new Date().toISOString(),
-        state: next,
+        state: safeState,
       });
     },
     resetProgress(gameState) {
@@ -616,6 +707,21 @@
         editorRestore: document.getElementById("editor-restore-btn"),
         editorDelete: document.getElementById("editor-delete-btn"),
         toastRoot: document.getElementById("toast-root"),
+        backupExportJsonBtn: document.getElementById("backup-export-json-btn"),
+        backupImportFileInput: document.getElementById("backup-import-file-input"),
+        backupImportJsonBtn: document.getElementById("backup-import-json-btn"),
+        backupCopyCodeBtn: document.getElementById("backup-copy-code-btn"),
+        backupCodeInput: document.getElementById("backup-code-input"),
+        backupRestoreCodeBtn: document.getElementById("backup-restore-code-btn"),
+        backupShowQrBtn: document.getElementById("backup-show-qr-btn"),
+        backupQrCanvas: document.getElementById("backup-qr-canvas"),
+        backupQrStatus: document.getElementById("backup-qr-status"),
+        backupScanQrBtn: document.getElementById("backup-scan-qr-btn"),
+        backupQrScanStatus: document.getElementById("backup-qr-scan-status"),
+        qrScanModal: document.getElementById("qr-scan-modal"),
+        qrScanBackdrop: document.getElementById("qr-scan-backdrop"),
+        qrScanVideo: document.getElementById("qr-scan-video"),
+        qrScanCloseBtn: document.getElementById("qr-scan-close-btn"),
         levelUpOverlay: document.getElementById("level-up-overlay"),
         levelUpTitle: document.getElementById("level-up-title"),
         levelUpLevel: document.getElementById("level-up-level"),
@@ -693,6 +799,95 @@
 
   function applyMotionPreferences() {
     document.body.classList.toggle("reduce-motion", state.settings.reduceMotion);
+  }
+
+  function encodeBase64UrlFromString(value) {
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  function decodeBase64UrlToString(value) {
+    const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+    const binary = atob(normalized + pad);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  async function gzipStringToBase64Url(value) {
+    if (typeof CompressionStream !== "function") return null;
+    const stream = new CompressionStream("gzip");
+    const writer = stream.writable.getWriter();
+    writer.write(new TextEncoder().encode(value));
+    writer.close();
+    const compressed = await new Response(stream.readable).arrayBuffer();
+    const bytes = new Uint8Array(compressed);
+    let binary = "";
+    bytes.forEach((byte) => {
+      binary += String.fromCharCode(byte);
+    });
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+
+  async function buildQrPayloadFromState(gameState) {
+    const raw = JSON.stringify({ schemaVersion: STATE_SCHEMA_VERSION, exportedAt: new Date().toISOString(), state: toPersistedGameState(gameState) });
+    const gz = await gzipStringToBase64Url(raw);
+    if (gz) return `HH1:gz:${gz}`;
+    return `HH1:b64:${encodeBase64UrlFromString(raw)}`;
+  }
+
+  async function ungzipBase64UrlToString(value) {
+    if (typeof DecompressionStream !== "function") throw new Error("Décompression non supportée.");
+    const normalized = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+    const pad = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+    const binary = atob(normalized + pad);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const stream = new DecompressionStream("gzip");
+    const writer = stream.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    const ab = await new Response(stream.readable).arrayBuffer();
+    return new TextDecoder().decode(new Uint8Array(ab));
+  }
+
+  async function parseQrPayloadToState(payload) {
+    const raw = String(payload || "").trim();
+    if (!raw.startsWith("HH1:")) throw new Error("Préfixe QR invalide.");
+    const parts = raw.split(":");
+    if (parts.length < 3) throw new Error("Format QR invalide.");
+    const format = parts[1];
+    const data = parts.slice(2).join(":");
+    const jsonText = format === "gz" ? await ungzipBase64UrlToString(data) : decodeBase64UrlToString(data);
+    return parseImportedPayload(jsonText);
+  }
+
+  function canScanQr() {
+    return typeof window.BarcodeDetector === "function" && navigator?.mediaDevices?.getUserMedia;
+  }
+
+  function parseImportedPayload(rawPayload) {
+    const parsed = JSON.parse(rawPayload);
+    const root = parsed && typeof parsed === "object" ? parsed : null;
+    if (!root) throw new Error("Format JSON invalide.");
+    if (!root.state || typeof root.state !== "object") throw new Error("Aucun champ state valide.");
+    const fromVersion = clamp(Math.floor(Number(root.schemaVersion ?? root.v ?? root.state.v) || 1), 1, 999);
+    const migrated = storage.migrateState(root.state, fromVersion);
+    const validation = validateState(migrated);
+    if (!validation.ok) throw new Error(`Validation échouée: ${validation.errors.join(", ")}`);
+    return validation.value;
+  }
+
+  function applyImportedState(nextState, sourceLabel) {
+    if (!window.confirm(`Confirmer la restauration depuis ${sourceLabel} ?`)) return;
+    storage.backupBeforeImport(state.game);
+    state.game = toPersistedGameState(nextState);
+    storage.saveState(state.game);
+    renderAll();
+    ui.showToast("success", "Sauvegarde importée", `Restauration réussie depuis ${sourceLabel}.`);
   }
 
   // === SECTION: In-memory state bootstrap ===
@@ -975,8 +1170,10 @@
     }, 0);
   }
 
-  function recomputeTotalXp() {
-    state.game.totalXp = computeClaimedXpTotal(state.game.claims);
+  function syncTotalXpNonDestructive() {
+    const claimedXp = computeClaimedXpTotal(state.game.claims);
+    const currentXp = Math.max(0, Math.floor(Number(state.game.totalXp) || 0));
+    state.game.totalXp = Math.max(currentXp, claimedXp);
     state.game.currencies.totalXp = state.game.totalXp;
   }
 
@@ -1587,7 +1784,8 @@
     const safeGoldDelta = isGoldEnabled() ? Math.floor(Number(goldDelta) || 0) : 0;
     state.game.xp = Math.max(0, state.game.xp + safeXpDelta);
     state.game.gold = Math.max(0, state.game.gold + safeGoldDelta);
-    recomputeTotalXp();
+    state.game.totalXp = Math.max(0, Math.floor(Number(state.game.totalXp) || 0) + safeXpDelta);
+    syncTotalXpNonDestructive();
     const progress = computeLevelProgress(state.game.totalXp);
     const nextLevel = Math.max(beforeLevel, progress.level);
     if (nextLevel > beforeLevel) {
@@ -2395,6 +2593,135 @@
       renderProgressionTab();
     });
 
+    ui.refs.backupExportJsonBtn?.addEventListener("click", () => {
+      const exportPayload = {
+        schemaVersion: STATE_SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        state: toPersistedGameState(state.game),
+      };
+      const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `habithub-save-${Date.now()}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      ui.showToast("success", "Export JSON", "Sauvegarde téléchargée.");
+    });
+
+    ui.refs.backupImportJsonBtn?.addEventListener("click", async () => {
+      const file = ui.refs.backupImportFileInput?.files?.[0];
+      if (!file) {
+        ui.showToast("warn", "Import JSON", "Choisis un fichier .json d'abord.");
+        return;
+      }
+      try {
+        const text = await file.text();
+        const imported = parseImportedPayload(text);
+        applyImportedState(imported, "JSON");
+      } catch (error) {
+        ui.showToast("error", "Import JSON", error instanceof Error ? error.message : "Import impossible.");
+      }
+    });
+
+    ui.refs.backupCopyCodeBtn?.addEventListener("click", async () => {
+      try {
+        const payload = JSON.stringify({ schemaVersion: STATE_SCHEMA_VERSION, exportedAt: new Date().toISOString(), state: toPersistedGameState(state.game) });
+        const code = encodeBase64UrlFromString(payload);
+        await navigator.clipboard.writeText(code);
+        ui.showToast("success", "Code copié", "Le code de sauvegarde est dans le presse-papier.");
+      } catch {
+        ui.showToast("error", "Code copié", "Impossible de copier automatiquement.");
+      }
+    });
+
+    ui.refs.backupRestoreCodeBtn?.addEventListener("click", () => {
+      const rawCode = (ui.refs.backupCodeInput?.value || "").trim();
+      if (!rawCode) {
+        ui.showToast("warn", "Code", "Colle un code de sauvegarde.");
+        return;
+      }
+      try {
+        const decoded = decodeBase64UrlToString(rawCode);
+        const imported = parseImportedPayload(decoded);
+        applyImportedState(imported, "code");
+      } catch (error) {
+        ui.showToast("error", "Code invalide", error instanceof Error ? error.message : "Restauration impossible.");
+      }
+    });
+
+    ui.refs.backupShowQrBtn?.addEventListener("click", async () => {
+      ui.refs.backupQrCanvas.hidden = true;
+      ui.refs.backupQrStatus.textContent = "Génération du QR…";
+      try {
+        const payload = await buildQrPayloadFromState(state.game);
+        const maxLen = 2000;
+        if (payload.length > maxLen) {
+          ui.refs.backupQrStatus.textContent = "Sauvegarde trop volumineuse pour 1 QR, utilise JSON ou Code.";
+          return;
+        }
+        window.HRPG.QR.drawToCanvas(ui.refs.backupQrCanvas, payload);
+        ui.refs.backupQrCanvas.hidden = false;
+        ui.refs.backupQrStatus.textContent = `QR prêt (${payload.length} caractères).`;
+      } catch {
+        ui.refs.backupQrStatus.textContent = "Erreur QR. Utilise JSON ou Code.";
+      }
+    });
+
+    const qrScanSupported = canScanQr();
+    if (ui.refs.backupScanQrBtn) ui.refs.backupScanQrBtn.disabled = !qrScanSupported;
+    if (ui.refs.backupQrScanStatus) {
+      ui.refs.backupQrScanStatus.textContent = qrScanSupported
+        ? "Scan activé (expérimental)."
+        : "Scan non supporté sur ce navigateur. Utilise JSON ou Code.";
+    }
+
+    let qrScanStream = null;
+    let qrScanInterval = null;
+
+    const closeQrScanner = () => {
+      if (qrScanInterval) {
+        clearInterval(qrScanInterval);
+        qrScanInterval = null;
+      }
+      if (qrScanStream) {
+        qrScanStream.getTracks().forEach((track) => track.stop());
+        qrScanStream = null;
+      }
+      if (ui.refs.qrScanModal) ui.refs.qrScanModal.hidden = true;
+      document.body.classList.remove("modal-open");
+    };
+
+    ui.refs.qrScanCloseBtn?.addEventListener("click", closeQrScanner);
+    ui.refs.qrScanBackdrop?.addEventListener("click", closeQrScanner);
+
+    ui.refs.backupScanQrBtn?.addEventListener("click", async () => {
+      if (!canScanQr()) {
+        ui.showToast("info", "QR", "Scan non supporté ici. Utilise JSON ou Code.");
+        return;
+      }
+      try {
+        const detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+        qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        ui.refs.qrScanVideo.srcObject = qrScanStream;
+        ui.refs.qrScanModal.hidden = false;
+        document.body.classList.add("modal-open");
+        qrScanInterval = setInterval(async () => {
+          if (!ui.refs.qrScanVideo || ui.refs.qrScanVideo.readyState < 2) return;
+          const codes = await detector.detect(ui.refs.qrScanVideo);
+          if (!codes || !codes.length) return;
+          const value = codes[0].rawValue;
+          closeQrScanner();
+          const imported = await parseQrPayloadToState(value);
+          applyImportedState(imported, "QR");
+        }, 450);
+      } catch (error) {
+        closeQrScanner();
+        ui.showToast("error", "QR", error instanceof Error ? error.message : "Scanner indisponible.");
+      }
+    });
+
     ui.refs.questsList.addEventListener("click", (event) => {
       const button = event.target.closest("[data-action='toggle-complete']");
       if (!button) return;
@@ -2699,7 +3026,7 @@
     applyMotionPreferences();
     setActiveTab(ui.activeTab);
     cleanupCompletedIds();
-    recomputeTotalXp();
+    syncTotalXpNonDestructive();
     const computedLevel = computeLevelProgress(state.game.totalXp).level;
     state.game.level = Math.max(state.game.level, computedLevel);
     state.game.progress.level = state.game.level;
