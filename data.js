@@ -50,6 +50,31 @@ const PROGRESSION_CONFIG = {
   },
 };
 
+const ECONOMY_CONFIG = {
+  mode: "balanced",
+  goldEnabled: true,
+  supportedModes: ["balanced", "raw"],
+  effortScale: {
+    min: 1,
+    max: 10,
+    default: 5,
+    labels: [
+      "Très facile",
+      "Facile",
+      "Léger",
+      "Modéré",
+      "Soutenu",
+      "Challenge",
+      "Intense",
+      "Très intense",
+      "Épique",
+      "Boss",
+    ],
+  },
+  effortXpTable: [6, 8, 10, 13, 16, 20, 25, 31, 38, 46],
+  effortGoldTable: [3, 4, 5, 7, 8, 10, 13, 16, 20, 24],
+};
+
 const INITIAL_GAME_STATE = {
   v: 1,
   currencies: { xp: 0, gold: 0, totalXp: 0, tokens: 0 },
@@ -99,9 +124,9 @@ const INITIAL_GAME_STATE = {
 
 HRPG.CONFIG = {
   BASE_QUESTS: [
-    { id: "water", title: "Boire 1L d'eau", xp: 10, gold: 5, icon: "water", createdAt: 1 },
-    { id: "walk", title: "Marcher 20 minutes", xp: 20, gold: 10, icon: "walk", createdAt: 2 },
-    { id: "read", title: "Lire 15 minutes", xp: 15, gold: 8, icon: "book", createdAt: 3 },
+    { id: "water", title: "Boire 1L d'eau", xp: 10, gold: 5, effort: 3, icon: "water", createdAt: 1 },
+    { id: "walk", title: "Marcher 20 minutes", xp: 20, gold: 10, effort: 6, icon: "walk", createdAt: 2 },
+    { id: "read", title: "Lire 15 minutes", xp: 15, gold: 8, effort: 5, icon: "book", createdAt: 3 },
   ],
   ICON_CATALOG: [
     { key: "water", label: "Eau", svg: '<svg viewBox="0 0 24 24"><path d="M12 2c3.3 4.1 6.5 7.5 6.5 11.2A6.5 6.5 0 1 1 5.5 13.2C5.5 9.5 8.7 6.1 12 2z"/></svg>' },
@@ -147,6 +172,7 @@ HRPG.CONFIG = {
     { key: "star", label: "Favori", svg: '<svg viewBox="0 0 24 24"><path d="M12 2 9.3 8.2 2.5 9l5 4.5L6.3 21 12 17.7 17.7 21l-1.2-7.5 5-4.5-6.8-.8z"/></svg>' },
   ],
   progressionConfig: PROGRESSION_CONFIG,
+  economyConfig: ECONOMY_CONFIG,
   initialGameState: INITIAL_GAME_STATE,
   initialState: { xp: 0, totalXp: 0, level: 1, gold: 0, completedQuestIds: [] },
   progression: { BASE_XP: 50, GROWTH: 1.25, LEVEL_UP_GOLD_BASE_BONUS: 10, LEVEL_UP_GOLD_PER_LEVEL: 2 },

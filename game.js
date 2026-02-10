@@ -1,6 +1,6 @@
 (function initHabitHub() {
   // === SECTION: Config access ===
-  const { BASE_QUESTS, ICON_CATALOG, initialGameState: INITIAL_GAME_STATE, progressionConfig: PROGRESSION_CONFIG, progression: PROGRESSION, ui: UI_CONFIG } = HRPG.CONFIG;
+  const { BASE_QUESTS, ICON_CATALOG, initialGameState: INITIAL_GAME_STATE, progressionConfig: PROGRESSION_CONFIG, progression: PROGRESSION, economyConfig: ECONOMY_CONFIG, ui: UI_CONFIG } = HRPG.CONFIG;
 
   function cloneJson(value) {
     return JSON.parse(JSON.stringify(value));
@@ -19,6 +19,71 @@
     seed.totalXp = seed.currencies.totalXp;
     seed.level = seed.progress.level;
     return seed;
+  }
+
+
+  function getEffortScaleConfig() {
+    const scale = ECONOMY_CONFIG?.effortScale || {};
+    const min = clamp(Math.floor(Number(scale.min) || 1), 1, 10);
+    const max = clamp(Math.floor(Number(scale.max) || 10), min, 10);
+    const defaultEffort = clamp(Math.floor(Number(scale.default) || 5), min, max);
+    return { min, max, defaultEffort };
+  }
+
+  function sanitizeRewardInput(value) {
+    if (!value || typeof value !== "object") return undefined;
+    const rewardInput = {};
+    if (value.xp !== undefined) rewardInput.xp = clamp(Math.round(Number(value.xp) || 0), 0, 999);
+    if (value.gold !== undefined) rewardInput.gold = clamp(Math.round(Number(value.gold) || 0), 0, 999);
+    return Object.keys(rewardInput).length ? rewardInput : undefined;
+  }
+
+  function estimateEffortFromXp(xpValue) {
+    const scale = getEffortScaleConfig();
+    const xpTable = Array.isArray(ECONOMY_CONFIG?.effortXpTable) ? ECONOMY_CONFIG.effortXpTable : [];
+    const safeXp = Math.max(0, Math.round(Number(xpValue) || 0));
+    let bestEffort = scale.defaultEffort;
+    let bestDelta = Number.POSITIVE_INFINITY;
+
+    for (let effort = scale.min; effort <= scale.max; effort += 1) {
+      const tableXp = Math.max(0, Math.round(Number(xpTable[effort - 1]) || 0));
+      const delta = Math.abs(tableXp - safeXp);
+      if (delta < bestDelta) {
+        bestDelta = delta;
+        bestEffort = effort;
+      }
+    }
+
+    return clamp(bestEffort, scale.min, scale.max);
+  }
+
+  function sanitizeEffort(value, xpFallback) {
+    const scale = getEffortScaleConfig();
+    const numericValue = Number(value);
+    const hasExplicitEffort = Number.isFinite(numericValue);
+    if (hasExplicitEffort) {
+      return clamp(Math.round(numericValue), scale.min, scale.max);
+    }
+    if (Number.isFinite(Number(xpFallback))) {
+      return estimateEffortFromXp(xpFallback);
+    }
+    return scale.defaultEffort;
+  }
+
+  function sanitizeQuestOverride(override) {
+    if (!override || typeof override !== "object") return {};
+    const next = { ...override };
+    if (override.title !== undefined) next.title = sanitizeTitle(override.title);
+    if (override.xp !== undefined) next.xp = clamp(Math.round(Number(override.xp) || 0), 1, 200);
+    if (override.gold !== undefined) next.gold = clamp(Math.round(Number(override.gold) || 0), 0, 200);
+    if (override.effort !== undefined || override.xp !== undefined) {
+      next.effort = sanitizeEffort(override.effort, override.xp);
+    }
+    if (!catalog.iconMap.has(override.icon)) delete next.icon;
+    const rewardInput = sanitizeRewardInput(override.rewardInput);
+    if (rewardInput) next.rewardInput = rewardInput;
+    else delete next.rewardInput;
+    return next;
   }
 
   function sanitizeEventLog(value) {
@@ -171,6 +236,7 @@
 
   // === SECTION: State persistence (load/save/migrations) ===
   const storage = {
+    hasPendingCatalogMigration: false,
     keys: {
       save: "habitrpg.save",
       legacyState: "habithub-state-v2",
@@ -233,7 +299,20 @@
     loadCustomQuests() {
       const list = this.loadJson(this.keys.custom, []);
       if (!Array.isArray(list)) return [];
-      return list.filter((entry) => entry && typeof entry.id === "string").map((entry) => sanitizeQuest(entry)).filter(Boolean);
+
+      let hasMigration = false;
+      const sanitized = list
+        .filter((entry) => entry && typeof entry.id === "string")
+        .map((entry) => {
+          const normalized = sanitizeQuest(entry);
+          if (!normalized) return null;
+          if (entry.effort === undefined || Number(entry.effort) !== normalized.effort) hasMigration = true;
+          return normalized;
+        })
+        .filter(Boolean);
+
+      this.hasPendingCatalogMigration = this.hasPendingCatalogMigration || hasMigration;
+      return sanitized;
     },
     saveCustomQuests(list) {
       this.saveJson(this.keys.custom, list);
@@ -247,7 +326,20 @@
     },
     loadOverrides() {
       const obj = this.loadJson(this.keys.overrides, {});
-      return obj && typeof obj === "object" ? obj : {};
+      if (!obj || typeof obj !== "object") return {};
+
+      let hasMigration = false;
+      const sanitized = Object.entries(obj).reduce((acc, [id, override]) => {
+        if (typeof id !== "string") return acc;
+        const normalized = sanitizeQuestOverride(override);
+        if (!Object.keys(normalized).length) return acc;
+        if (override?.effort === undefined && normalized.effort !== undefined) hasMigration = true;
+        acc[id] = normalized;
+        return acc;
+      }, {});
+
+      this.hasPendingCatalogMigration = this.hasPendingCatalogMigration || hasMigration;
+      return sanitized;
     },
     saveOverrides(overrides) {
       this.saveJson(this.keys.overrides, overrides);
@@ -304,10 +396,12 @@
         title: sanitizeTitle(override.title ?? quest.title),
         xp: clamp(Math.round(Number(override.xp ?? quest.xp) || 1), 1, 200),
         gold: clamp(Math.round(Number(override.gold ?? quest.gold) || 0), 0, 200),
+        effort: sanitizeEffort(override.effort ?? quest.effort, override.xp ?? quest.xp),
         icon: this.iconMap.has(override.icon) ? override.icon : quest.icon,
         source: isSeed ? "seed" : "custom",
         isHidden: state.hiddenQuestIds.includes(quest.id),
         hasOverride: Boolean(state.questOverrides[quest.id]),
+        rewardInput: sanitizeRewardInput(override.rewardInput ?? quest.rewardInput),
       };
     },
   };
@@ -486,6 +580,10 @@
   state.game.v = clamp(Math.floor(Number(state.game.v) || 1), 1, 999);
   assertState(state.game);
 
+  if (storage.hasPendingCatalogMigration) {
+    persistCatalog();
+  }
+
   // === SECTION: Device feedback (haptics/sound) ===
   const haptics = {
     tap() {
@@ -573,14 +671,19 @@
   function sanitizeQuest(quest) {
     const title = sanitizeTitle(quest.title);
     if (title.length < 2) return null;
-    return {
+    const xp = clamp(Math.round(Number(quest.xp) || 0), 1, 200);
+    const rewardInput = sanitizeRewardInput(quest.rewardInput);
+    const sanitizedQuest = {
       id: typeof quest.id === "string" ? quest.id : createQuestId(),
       title,
-      xp: clamp(Math.round(Number(quest.xp) || 0), 1, 200),
+      xp,
       gold: clamp(Math.round(Number(quest.gold) || 0), 0, 200),
+      effort: sanitizeEffort(quest.effort, xp),
       icon: catalog.iconMap.has(quest.icon) ? quest.icon : ICON_CATALOG[0].key,
       createdAt: Number(quest.createdAt) || Date.now(),
     };
+    if (rewardInput) sanitizedQuest.rewardInput = rewardInput;
+    return sanitizedQuest;
   }
 
   function createQuestId() {
