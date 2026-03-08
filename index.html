@@ -5,31 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#123886" />
     <link rel="manifest" href="manifest.webmanifest" />
-    <title>HabitHub — MVP offline</title>
+    <title>HabitHub</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main class="app-shell">
-      <nav class="tabs app-nav" aria-label="Navigation principale">
-        <button type="button" class="btn btn-ghost tab-btn is-active" data-tab-target="today" aria-controls="tab-today">
+      <nav class="tabs app-nav" role="tablist" aria-label="Navigation principale">
+        <button type="button" class="btn btn-ghost tab-btn is-active" role="tab" data-tab-target="today" aria-controls="tab-today" aria-selected="true">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4 4 10v10h16V10z"/><path d="M9 20v-6h6v6"/></svg></span>
           <span class="nav-label">Aujourd'hui</span>
         </button>
-        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="catalogue" aria-controls="tab-catalogue">
+        <button type="button" class="btn btn-ghost tab-btn" role="tab" data-tab-target="catalogue" aria-controls="tab-catalogue" aria-selected="false">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 6h16v14H4z"/><path d="M8 10h8M8 14h5" stroke="currentColor" stroke-width="2" fill="none"/></svg></span>
           <span class="nav-label">Catalogue</span>
         </button>
-        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="progression" aria-controls="tab-progression">
+        <button type="button" class="btn btn-ghost tab-btn" role="tab" data-tab-target="progression" aria-controls="tab-progression" aria-selected="false">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 18h16v2H4z"/><path d="M7 16V9h2v7zm4 0V6h2v10zm4 0v-4h2v4z"/></svg></span>
           <span class="nav-label">Progression</span>
         </button>
-        <button type="button" class="btn btn-ghost tab-btn" data-tab-target="settings" aria-controls="tab-settings">
+        <button type="button" class="btn btn-ghost tab-btn" role="tab" data-tab-target="settings" aria-controls="tab-settings" aria-selected="false">
           <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5z"/><path d="m20 13.2-1.6.5a6.7 6.7 0 0 1-.4 1l.9 1.4-1.8 1.8-1.4-.9a6.7 6.7 0 0 1-1 .4L13.2 20h-2.4l-.5-1.6a6.7 6.7 0 0 1-1-.4l-1.4.9-1.8-1.8.9-1.4a6.7 6.7 0 0 1-.4-1L4 13.2v-2.4l1.6-.5a6.7 6.7 0 0 1 .4-1L5 7.9l1.8-1.8 1.4.9a6.7 6.7 0 0 1 1-.4L10.8 4h2.4l.5 1.6a6.7 6.7 0 0 1 1 .4l1.4-.9L18 7.9l-.9 1.4a6.7 6.7 0 0 1 .4 1l1.6.5z"/></svg></span>
           <span class="nav-label">Réglages</span>
         </button>
       </nav>
 
-      <section id="tab-today" data-tab-panel="today">
+      <section id="tab-today" data-tab-panel="today" role="tabpanel" aria-labelledby="tab-btn-today">
         <section class="card xp-hero" aria-live="polite" aria-labelledby="xp-hero-title">
           <div class="xp-hero-head">
             <h2 id="xp-hero-title">Niveau 1</h2>
@@ -79,7 +79,7 @@
         </div>
       </section>
 
-      <section id="tab-progression" data-tab-panel="progression" hidden>
+      <section id="tab-progression" data-tab-panel="progression" role="tabpanel" aria-labelledby="tab-btn-progression" hidden>
         <section class="card progression-dashboard" aria-labelledby="progression-dashboard-title">
           <h2 id="progression-dashboard-title">Progression complète</h2>
 
@@ -121,7 +121,7 @@
         </section>
       </section>
 
-      <section id="tab-catalogue" data-tab-panel="catalogue" hidden>
+      <section id="tab-catalogue" data-tab-panel="catalogue" role="tabpanel" aria-labelledby="tab-btn-catalogue" hidden>
         <section class="card manage-panel" aria-labelledby="create-title">
           <div class="create-toolbar">
             <h2 id="create-title">Catalogue des habitudes</h2>
@@ -158,7 +158,7 @@
         </section>
       </section>
 
-      <section id="tab-settings" data-tab-panel="settings" hidden>
+      <section id="tab-settings" data-tab-panel="settings" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
         <section class="card settings-panel" aria-labelledby="settings-title">
           <h2 id="settings-title">Réglages</h2>
           <p class="progress-subtext">Beta Test 1</p>

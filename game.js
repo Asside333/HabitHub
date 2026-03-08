@@ -858,11 +858,13 @@
       toast.innerHTML = `
         <div class="toast-icon">${iconMap[toastType] || iconMap.info}</div>
         <div class="toast-copy">
-          <strong class="toast-title">${title}</strong>
-          ${message ? `<p class="toast-message">${message}</p>` : ""}
+          <strong class="toast-title"></strong>
+          ${message ? '<p class="toast-message"></p>' : ""}
         </div>
-        <button type="button" class="toast-close" aria-label="Fermer la notification">✕</button>
+        <button type="button" class="toast-close" aria-label="Fermer la notification">&#x2715;</button>
       `;
+      toast.querySelector(".toast-title").textContent = title;
+      if (message) toast.querySelector(".toast-message").textContent = message;
 
       const closeToast = () => {
         if (toast.dataset.closing === "1") return;
@@ -989,7 +991,7 @@
     storage.backupBeforeImport(state.game);
     state.game = toPersistedGameState(nextState);
     storage.saveState(state.game);
-    renderAll();
+    renderAllTabs();
     ui.showToast("success", "Sauvegarde importée", `Restauration réussie depuis ${sourceLabel}.`);
   }
 
@@ -1093,6 +1095,14 @@
     overrides: "Modifiées (overrides)",
   };
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function sanitizeTitle(value) {
     return String(value ?? "").replace(/\s+/g, " ").trim();
   }
@@ -1179,13 +1189,16 @@
     const classes = ["pbar", `pbar--${variant}`, `is-${palette.bucket}`];
     if (variant === "reward" && ratio >= 0.65) classes.push("pbar--goal-gradient");
     if (config.glow !== false && ratio >= 0.85 && !prefersReducedMotion()) classes.push("pbar--glow");
+    const safeLabel = escapeHtml(label);
+    const safeSublabel = escapeHtml(sublabel);
+    const safeAriaText = escapeHtml(ariaText);
     const markup = `
-      <div class="${classes.join(" ")}" role="group" aria-label="${label}">
+      <div class="${classes.join(" ")}" role="group" aria-label="${safeLabel}">
         <div class="pbar-meta">
-          <div><span class="pbar-label">${label}</span>${sublabel ? `<span class="pbar-sub">${sublabel}</span>` : ""}</div>
-          <span class="pbar-numbers">${numbers}</span>
+          <div><span class="pbar-label">${safeLabel}</span>${safeSublabel ? `<span class="pbar-sub">${safeSublabel}</span>` : ""}</div>
+          <span class="pbar-numbers">${escapeHtml(numbers)}</span>
         </div>
-        <div class="pbar-track" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="${safeMax}" aria-valuenow="${safeValue}" aria-valuetext="${ariaText}">
+        <div class="pbar-track" role="progressbar" aria-label="${safeLabel}" aria-valuemin="0" aria-valuemax="${safeMax}" aria-valuenow="${safeValue}" aria-valuetext="${safeAriaText}">
           <div class="pbar-fill"></div>
         </div>
       </div>`;
@@ -1585,8 +1598,8 @@
 
     const capResult = applyDailyCaps(dateKey, xpComputed, goldComputed, gameState?.level);
     const preview = options?.preview === true;
-    const xpGranted = preview ? capResult.xpGranted : capResult.xpGranted;
-    const goldGranted = preview ? capResult.goldGranted : capResult.goldGranted;
+    const xpGranted = capResult.xpGranted;
+    const goldGranted = capResult.goldGranted;
 
     return {
       xpComputed,
@@ -1879,7 +1892,7 @@
       finalizePreviousDay(state.game.progress.lastActiveDate);
       state.game.completedQuestIds = [];
       state.game.quests.completedQuestIds = state.game.completedQuestIds;
-      ui.showToast(`Nouveau jour détecté (${activeDate})`);
+      ui.showToast("info", "Nouveau jour", `Détecté : ${activeDate}`);
     }
     state.game.progress.lastActiveDate = activeDate;
     state.game.daily.dateKey = activeDate;
@@ -1904,6 +1917,17 @@
 
   function getQuestById(id) {
     return catalog.getAllQuestsMerged().find((quest) => quest.id === id);
+  }
+
+  function rollbackCompletedQuest(quest) {
+    if (!quest) return;
+    const dateKey = getActiveDateIso();
+    const result = claimReward({ actionId: quest.id, dateKey, mode: "rollback" });
+    if (result.applied) {
+      state.game.completedQuestIds = state.game.completedQuestIds.filter((id) => id !== quest.id);
+      state.game.quests.completedQuestIds = state.game.completedQuestIds;
+      ensureDailyProgressState();
+    }
   }
 
   function computeLevelUpReward(fromLevel, toLevel) {
@@ -2236,13 +2260,14 @@
         <div class="quest-main">
           <div class="quest-icon quest-icon-round">${catalog.getIcon(quest.icon).svg}</div>
           <div class="quest-copy">
-            <p class="quest-title">${quest.title}</p>
+            <p class="quest-title"></p>
             <p class="quest-subtitle">${isCompleted ? "Quête complétée" : "Objectif quotidien"}</p>
             <div class="reward-chips">${renderRewardChips(getRewardPreviewFromEffort(quest))}</div>
           </div>
         </div>
-        <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${quest.id}">${isCompleted ? "Annuler" : "Terminer"}</button>
+        <button class="btn ${isCompleted ? "btn-success btn-completed" : "btn-primary"}" data-action="toggle-complete" data-id="${escapeHtml(quest.id)}">${isCompleted ? "Annuler" : "Terminer"}</button>
         <span class="quest-spark" aria-hidden="true"></span>`;
+      li.querySelector(".quest-title").textContent = quest.title;
       ui.refs.questsList.append(li);
     });
 
@@ -2707,22 +2732,24 @@
       const card = document.createElement("li");
       card.className = `card catalog-card ${quest.isHidden ? "is-hidden" : ""}`;
       card.dataset.questId = quest.id;
+      const safeId = escapeHtml(quest.id);
       card.innerHTML = `
-        <label class="select-check"><input type="checkbox" data-action="select-catalog" data-id="${quest.id}" ${ui.selectedIds.has(quest.id) ? "checked" : ""}/> </label>
+        <label class="select-check"><input type="checkbox" data-action="select-catalog" data-id="${safeId}" ${ui.selectedIds.has(quest.id) ? "checked" : ""}/> </label>
         <div class="quest-main">
           <div class="quest-icon">${catalog.getIcon(quest.icon).svg}</div>
           <div>
-            <p class="quest-title">${quest.title}</p>
+            <p class="quest-title"></p>
             <div class="reward-chips">${renderRewardChips(getRewardPreviewFromEffort(quest))}</div>
             <div class="reward-chips"><span class="chip ${quest.source === "seed" ? "chip-seed" : "chip-custom"}">${quest.source === "seed" ? "Seed" : "Custom"}</span><span class="chip ${quest.isHidden ? "chip-hidden" : "chip-visible"}">${quest.isHidden ? "Masquée" : "Visible"}</span>${quest.hasOverride ? '<span class="chip chip-override">Modifiée</span>' : ""}</div>
           </div>
         </div>
         <div class="card-actions">
-          <button class="btn btn-ghost" data-action="edit-quest" data-id="${quest.id}">✏️ Éditer</button>
-          <button class="btn btn-ghost" data-action="toggle-hidden" data-id="${quest.id}">${quest.isHidden ? "👁️ Afficher" : "🙈 Masquer"}</button>
-          ${quest.source === "custom" ? `<button class="btn btn-danger" data-action="delete-quest" data-id="${quest.id}">🗑️ Supprimer</button>` : ""}
-          ${quest.hasOverride ? `<button class="btn btn-ghost" data-action="restore-quest" data-id="${quest.id}">↩️ Restaurer</button>` : ""}
+          <button class="btn btn-ghost" data-action="edit-quest" data-id="${safeId}">Éditer</button>
+          <button class="btn btn-ghost" data-action="toggle-hidden" data-id="${safeId}">${quest.isHidden ? "Afficher" : "Masquer"}</button>
+          ${quest.source === "custom" ? `<button class="btn btn-danger" data-action="delete-quest" data-id="${safeId}">Supprimer</button>` : ""}
+          ${quest.hasOverride ? `<button class="btn btn-ghost" data-action="restore-quest" data-id="${safeId}">Restaurer</button>` : ""}
         </div>`;
+      card.querySelector(".quest-title").textContent = quest.title;
       ui.refs.catalogList.append(card);
     });
   }
@@ -2787,7 +2814,7 @@
       const createdId = createQuestId();
       state.customQuests.push({ id: createdId, ...payload, createdAt: Date.now() });
       persistCatalog();
-      ui.showToast("Enregistré ✅");
+      ui.showToast("success", "Catalogue", "Habitude enregistrée.");
       haptics.complete();
       audioFx.play("pop");
       ui.selectedIds.clear();
@@ -2804,7 +2831,7 @@
       }
       persistCatalog();
       storage.saveState(state.game);
-      ui.showToast("Enregistré ✅");
+      ui.showToast("success", "Catalogue", "Habitude mise à jour.");
       haptics.complete();
       audioFx.play("pop");
     }
@@ -3267,7 +3294,7 @@
       const button = event.target.closest("[data-action='toggle-complete']");
       if (!button) return;
       button.classList.remove("btn-punch");
-      button.offsetHeight;
+      void button.offsetHeight;
       button.classList.add("btn-punch");
       toggleQuestCompletion(button.dataset.id);
     });
