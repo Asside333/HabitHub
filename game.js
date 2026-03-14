@@ -47,7 +47,6 @@
     seed.quests.completedQuestIds = Array.isArray(seed.quests.completedQuestIds) ? seed.quests.completedQuestIds : [];
     seed.completedQuestIds = seed.quests.completedQuestIds;
     seed.xp = seed.currencies.xp;
-    seed.gold = seed.currencies.gold;
     seed.totalXp = seed.currencies.totalXp;
     seed.level = seed.progress.level;
     return seed;
@@ -67,30 +66,13 @@
     const xpMin = Math.max(0, Math.floor(Number(ranges.xp?.min) || 0));
     const xpMax = Math.max(xpMin, Math.floor(Number(ranges.xp?.max) || 400));
     const xpStep = Math.max(1, Math.floor(Number(ranges.xp?.step) || 1));
-    const goldMin = Math.max(0, Math.floor(Number(ranges.gold?.min) || 0));
-    const goldMax = Math.max(goldMin, Math.floor(Number(ranges.gold?.max) || 250));
-    const goldStep = Math.max(1, Math.floor(Number(ranges.gold?.step) || 1));
-    return {
-      xp: { min: xpMin, max: xpMax, step: xpStep },
-      gold: { min: goldMin, max: goldMax, step: goldStep },
-    };
+    return { xp: { min: xpMin, max: xpMax, step: xpStep } };
   }
 
-  function isGoldFeatureEnabled() {
-    return FEATURES?.goldEnabled === true;
-  }
-
-  function isGoldEnabled() {
-    if (!isGoldFeatureEnabled()) return false;
-    return ECONOMY_CONFIG.goldEnabled !== false;
-  }
-
-  function formatRewardText(xpValue, goldValue, withPlusPrefix = true) {
+  function formatRewardText(xpValue, withPlusPrefix = true) {
     const safeXp = Math.max(0, Math.floor(Number(xpValue) || 0));
-    const safeGold = Math.max(0, Math.floor(Number(goldValue) || 0));
     const prefix = withPlusPrefix ? "+" : "";
-    if (!isGoldEnabled()) return `${prefix}${safeXp} XP`;
-    return `${prefix}${safeXp} XP • ${prefix}${safeGold} Gold`;
+    return `${prefix}${safeXp} XP`;
   }
 
   function getEconomyPresets() {
@@ -112,15 +94,11 @@
     const source = raw && typeof raw === "object" ? raw : {};
     const ranges = getEconomyCapRanges();
     const xpDefault = Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase) || 0);
-    const goldDefault = Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase) || 0);
-    const fallbackGoldEnabled = ECONOMY_CONFIG.goldEnabledDefault !== false;
     const smoothingPreset = typeof source.smoothingPreset === "string" && getEconomyPresets()[source.smoothingPreset]
       ? source.smoothingPreset
       : getConfiguredDefaultPreset();
     return {
-      goldEnabled: isGoldFeatureEnabled() && (source.goldEnabled !== undefined ? source.goldEnabled !== false : fallbackGoldEnabled),
       dailyXpCapBase: clamp(Math.floor(Number(source.dailyXpCapBase ?? xpDefault) || 0), ranges.xp.min, ranges.xp.max),
-      dailyGoldCapBase: clamp(Math.floor(Number(source.dailyGoldCapBase ?? goldDefault) || 0), ranges.gold.min, ranges.gold.max),
       smoothingPreset,
     };
   }
@@ -128,28 +106,17 @@
   function ensureEconomySettingsShape(settings) {
     const safe = settings && typeof settings === "object" ? settings : {};
     const overrides = resolveEconomyOverrides(safe.economyOverrides ?? safe.economy);
-    const economy = {
-      goldEnabled: overrides.goldEnabled,
-      dailyXpCap: overrides.dailyXpCapBase,
-      dailyGoldCap: overrides.dailyGoldCapBase,
-    };
     return {
       ...safe,
-      economy,
-      economyOverrides: {
-        ...overrides,
-        dailyXpCapBase: economy.dailyXpCap,
-        dailyGoldCapBase: economy.dailyGoldCap,
-      },
+      economy: { dailyXpCap: overrides.dailyXpCapBase },
+      economyOverrides: { ...overrides },
     };
   }
 
   function applyEconomySettingsToConfig(settings) {
     const normalizedSettings = ensureEconomySettingsShape(settings);
     const overrides = normalizedSettings.economyOverrides;
-    ECONOMY_CONFIG.goldEnabled = isGoldFeatureEnabled() && overrides.goldEnabled;
     ECONOMY_CONFIG.dailyXpCapBase = overrides.dailyXpCapBase;
-    ECONOMY_CONFIG.dailyGoldCapBase = overrides.dailyGoldCapBase;
     ECONOMY_CONFIG.smoothingPreset = overrides.smoothingPreset;
   }
 
@@ -157,7 +124,6 @@
     if (!value || typeof value !== "object") return undefined;
     const rewardInput = {};
     if (value.xp !== undefined) rewardInput.xp = clamp(Math.round(Number(value.xp) || 0), 0, 999);
-    if (value.gold !== undefined) rewardInput.gold = clamp(Math.round(Number(value.gold) || 0), 0, 999);
     return Object.keys(rewardInput).length ? rewardInput : undefined;
   }
 
@@ -198,7 +164,6 @@
     const next = { ...override };
     if (override.title !== undefined) next.title = sanitizeTitle(override.title);
     if (override.xp !== undefined) next.xp = clamp(Math.round(Number(override.xp) || 0), 1, 200);
-    if (override.gold !== undefined) next.gold = clamp(Math.round(Number(override.gold) || 0), 0, 200);
     if (override.effort !== undefined || override.xp !== undefined) {
       next.effort = sanitizeEffort(override.effort, override.xp);
     }
@@ -227,18 +192,15 @@
     return Object.entries(value).reduce((acc, [key, claim]) => {
       if (typeof key !== "string" || !claim || typeof claim !== "object") return acc;
       const xp = Math.max(0, Number(claim.xpGranted ?? claim.xp) || 0);
-      const gold = Math.max(0, Number(claim.goldGranted ?? claim.gold) || 0);
       const claimedAt = typeof claim.claimedAt === "string" ? claim.claimedAt : new Date().toISOString();
-      acc[key] = { claimedAt, xp, gold, xpGranted: xp, goldGranted: gold };
+      acc[key] = { claimedAt, xp, xpGranted: xp };
       return acc;
     }, {});
   }
 
-  function getClaimGrantedValue(claim, currency) {
+  function getClaimGrantedValue(claim) {
     if (!claim || typeof claim !== "object") return 0;
-    const grantedKey = currency === "gold" ? "goldGranted" : "xpGranted";
-    const fallbackKey = currency === "gold" ? "gold" : "xp";
-    return Math.max(0, Math.floor(Number(claim[grantedKey] ?? claim[fallbackKey]) || 0));
+    return Math.max(0, Math.floor(Number(claim.xpGranted ?? claim.xp) || 0));
   }
 
   function sanitizeDailyState(value) {
@@ -247,7 +209,6 @@
       dateKey: typeof raw.dateKey === "string" ? raw.dateKey : null,
       objectivesCompleted: Math.max(0, Math.floor(Number(raw.objectivesCompleted) || 0)),
       tier: typeof raw.tier === "string" ? raw.tier : "none",
-      tierBonusGoldApplied: Math.max(0, Math.floor(Number(raw.tierBonusGoldApplied) || 0)),
       vacationMode: raw.vacationMode === true,
     };
   }
@@ -281,8 +242,6 @@
         relicsUnlocked: Array.isArray(yearlyRaw.relicsUnlocked) ? yearlyRaw.relicsUnlocked.filter((id) => typeof id === "string") : [],
         milestonesClaimed: Array.isArray(yearlyRaw.milestonesClaimed) ? yearlyRaw.milestonesClaimed.filter((id) => typeof id === "string") : [],
       },
-      cosmeticInventory: Array.isArray(raw.cosmeticInventory) ? raw.cosmeticInventory.filter((id) => typeof id === "string") : [],
-      badgesUnlocked: Array.isArray(raw.badgesUnlocked) ? raw.badgesUnlocked.filter((id) => typeof id === "string") : [],
     };
   }
 
@@ -297,17 +256,11 @@
     const totalXp = clamp(Number(rawState.totalXp ?? rawState.currencies?.totalXp ?? rawState.xp ?? rawState.currencies?.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
     const progressData = computeLevelProgress(totalXp);
     const xp = clamp(Number(rawState.xp ?? rawState.currencies?.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
-    const gold = clamp(Number(rawState.gold ?? rawState.currencies?.gold) || 0, 0, Number.MAX_SAFE_INTEGER);
     const level = Math.max(progressData.level, Number(rawState.level ?? rawState.progress?.level) || 1);
 
     const next = {
       v: clamp(Math.floor(Number(rawState.v) || 1), 1, 999),
-      currencies: {
-        xp,
-        gold,
-        totalXp,
-        tokens: Math.max(0, Number(rawState.currencies?.tokens) || 0),
-      },
+      currencies: { xp, totalXp },
       daily: sanitizeDailyState(rawState.daily),
       progress: {
         level,
@@ -341,7 +294,6 @@
 
     next.completedQuestIds = next.quests.completedQuestIds;
     next.xp = next.currencies.xp;
-    next.gold = next.currencies.gold;
     next.totalXp = next.currencies.totalXp;
     next.level = next.progress.level;
     return next;
@@ -351,7 +303,6 @@
     const normalized = normalizeGameState(gameState);
     normalized.v = STATE_SCHEMA_VERSION;
     normalized.currencies.xp = clamp(Number(normalized.xp) || 0, 0, Number.MAX_SAFE_INTEGER);
-    normalized.currencies.gold = clamp(Number(normalized.gold) || 0, 0, Number.MAX_SAFE_INTEGER);
     normalized.currencies.totalXp = clamp(Number(normalized.totalXp) || 0, 0, Number.MAX_SAFE_INTEGER);
     normalized.progress.level = Math.max(1, Number(normalized.level) || 1);
     normalized.quests.completedQuestIds = Array.isArray(normalized.completedQuestIds) ? normalized.completedQuestIds.filter((id) => typeof id === "string") : [];
@@ -365,6 +316,10 @@
     normalized.progress.restDaysUsedByWeek = normalized.progress.restDaysUsedByWeek && typeof normalized.progress.restDaysUsedByWeek === "object" ? normalized.progress.restDaysUsedByWeek : {};
     normalized.progress.vacationDaysRemaining = Math.max(0, Number(normalized.progress.vacationDaysRemaining) || 0);
     normalized.cycles = sanitizeCycles(normalized.cycles);
+    // ensure no gold/token fields leak back in
+    delete normalized.gold;
+    delete normalized.currencies?.gold;
+    delete normalized.currencies?.tokens;
     return normalized;
   }
 
@@ -389,7 +344,6 @@
     if (!Number.isInteger(stateValue.v) || stateValue.v < 1) errors.push("invalid_version");
     if (!isFiniteNumber(stateValue.xp) || stateValue.xp < 0) errors.push("invalid_xp");
     if (!isFiniteNumber(stateValue.totalXp) || stateValue.totalXp < 0) errors.push("invalid_total_xp");
-    if (!isFiniteNumber(stateValue.gold) || stateValue.gold < 0) errors.push("invalid_gold");
     if (!isFiniteNumber(stateValue.level) || stateValue.level < 1) errors.push("invalid_level");
     if (!stateValue.quests || !Array.isArray(stateValue.quests.completedQuestIds)) errors.push("invalid_habits_list");
     if (!stateValue.claims || typeof stateValue.claims !== "object" || !stateValue.claims.rewardClaims || typeof stateValue.claims.rewardClaims !== "object") {
@@ -411,11 +365,6 @@
         corrections.push(`reward_claim_xp_fixed:${claimKey}`);
         rewardClaims[claimKey].xpGranted = 0;
         rewardClaims[claimKey].xp = 0;
-      }
-      if (!Number.isFinite(Number(claim?.goldGranted ?? claim?.gold))) {
-        corrections.push(`reward_claim_gold_fixed:${claimKey}`);
-        rewardClaims[claimKey].goldGranted = 0;
-        rewardClaims[claimKey].gold = 0;
       }
     });
 
@@ -683,7 +632,6 @@
         ...override,
         title: sanitizeTitle(override.title ?? quest.title),
         xp: clamp(Math.round(Number(override.xp ?? quest.xp) || 1), 1, 200),
-        gold: clamp(Math.round(Number(override.gold ?? quest.gold) || 0), 0, 200),
         effort: sanitizeEffort(override.effort ?? quest.effort, override.xp ?? quest.xp),
         icon: this.iconMap.has(override.icon) ? override.icon : quest.icon,
         source: isSeed ? "seed" : "custom",
@@ -717,7 +665,6 @@
         todayOpenProgressionBtn: document.getElementById("today-open-progression-btn"),
         todayOpenProgressionInlineBtn: document.getElementById("today-open-progression-inline-btn"),
         xp: document.getElementById("xp-value"),
-        gold: document.getElementById("gold-value"),
         levelBadge: document.getElementById("level-badge"),
         xpHeroTitle: document.getElementById("xp-hero-title"),
         xpHeroText: document.getElementById("xp-hero-text"),
@@ -766,13 +713,8 @@
         soundsVolumeRange: document.getElementById("sounds-volume-range"),
         soundsVolumeValue: document.getElementById("sounds-volume-value"),
         soundsVolumeRow: document.getElementById("sounds-volume-row"),
-        economyGoldToggle: document.getElementById("economy-gold-toggle"),
-        economyGoldState: document.getElementById("economy-gold-state"),
         economyXpCapRange: document.getElementById("economy-xp-cap-range"),
         economyXpCapValue: document.getElementById("economy-xp-cap-value"),
-        economyGoldCapRow: document.getElementById("economy-gold-cap-row"),
-        economyGoldCapRange: document.getElementById("economy-gold-cap-range"),
-        economyGoldCapValue: document.getElementById("economy-gold-cap-value"),
         economyPresetButtons: Array.from(document.querySelectorAll("[data-economy-preset]")),
         economyAuditStatus: document.getElementById("economy-audit-status"),
         economyAuditPotentialXp: document.getElementById("economy-audit-potential-xp"),
@@ -781,8 +723,6 @@
         economyAuditSource: document.getElementById("economy-audit-source"),
         economyAuditRecommendBtn: document.getElementById("economy-audit-recommend-btn"),
         economyAuditRecommendText: document.getElementById("economy-audit-recommend-text"),
-        goldStatCard: document.getElementById("gold-stat-card"),
-        goldSortOption: document.getElementById("sort-gold-desc-option"),
         progressionBossStreak: document.getElementById("progression-boss-streak"),
         progressionYearMilestones: document.getElementById("progression-year-milestones"),
         catalogList: document.getElementById("catalog-list"),
@@ -889,13 +829,13 @@
       document.body.classList.remove("modal-open");
       renderStats();
     },
-    showLevelUpOverlay(level, rewardGold) {
+    showLevelUpOverlay(level) {
       const overlayConfig = UI_CONFIG.levelUpOverlay || {};
       renderStats();
       this.refs.levelUpTitle.textContent = overlayConfig.title || "LEVEL UP";
       this.refs.levelUpCloseBtn.textContent = overlayConfig.ctaLabel || "Continuer";
       this.refs.levelUpLevel.textContent = `Niveau ${level} atteint !`;
-      this.refs.levelUpMessage.textContent = isGoldEnabled() ? `Récompense: +${rewardGold} Gold` : "Récompense: progression XP";
+      this.refs.levelUpMessage.textContent = "Continuez sur votre lancée !";
       this.refs.levelUpOverlay.hidden = false;
       document.body.classList.add("modal-open");
     },
@@ -1116,7 +1056,6 @@
       id: typeof quest.id === "string" ? quest.id : createQuestId(),
       title,
       xp,
-      gold: clamp(Math.round(Number(quest.gold) || 0), 0, 200),
       effort: sanitizeEffort(quest.effort, xp),
       icon: catalog.iconMap.has(quest.icon) ? quest.icon : ICON_CATALOG[0].key,
       createdAt: Number(quest.createdAt) || Date.now(),
@@ -1230,11 +1169,10 @@
 
     const errors = [];
     const numericFields = [
-      ["currencies.xp", gameState?.currencies?.xp],
-      ["currencies.gold", gameState?.currencies?.gold],
+      ["currencies.xp",    gameState?.currencies?.xp],
       ["currencies.totalXp", gameState?.currencies?.totalXp],
-      ["progress.level", gameState?.progress?.level],
-      ["progress.streak", gameState?.progress?.streak],
+      ["progress.level",   gameState?.progress?.level],
+      ["progress.streak",  gameState?.progress?.streak],
     ];
 
     numericFields.forEach(([label, value]) => {
@@ -1244,7 +1182,6 @@
     });
 
     if ((Number(gameState?.currencies?.xp) || 0) < 0) errors.push("currencies.xp cannot be negative");
-    if ((Number(gameState?.currencies?.gold) || 0) < 0) errors.push("currencies.gold cannot be negative");
 
     if (!gameState?.currencies || !gameState?.progress || !gameState?.quests || !gameState?.claims || !gameState?.daily) {
       errors.push("state is missing required fields");
@@ -1303,7 +1240,7 @@
   function computeClaimedXpTotal(claims) {
     const rewardClaims = claims?.rewardClaims && typeof claims.rewardClaims === "object" ? claims.rewardClaims : {};
     return Object.values(rewardClaims).reduce((acc, claim) => {
-      return acc + getClaimGrantedValue(claim, "xp");
+      return acc + getClaimGrantedValue(claim);
     }, 0);
   }
 
@@ -1330,12 +1267,6 @@
     return "none";
   }
 
-  function getTierBonusGold(tier) {
-    if (tier === "none") return 0;
-    const tierConfig = PROGRESSION_CONFIG.dailyTiers[tier];
-    return Math.max(0, Math.floor(Number(tierConfig?.bonusGold) || 0));
-  }
-
   function countDistinctDailyObjectives(dateKey) {
     if (!dateKey) return 0;
     const prefix = `${dateKey}:`;
@@ -1353,30 +1284,13 @@
       state.game.daily.dateKey = dateKey;
       state.game.daily.objectivesCompleted = 0;
       state.game.daily.tier = "none";
-      state.game.daily.tierBonusGoldApplied = 0;
     }
 
     const objectivesCompleted = countDistinctDailyObjectives(dateKey);
     const tier = computeTier(objectivesCompleted);
-    const bonusWanted = getTierBonusGold(tier);
-    const bonusApplied = Math.max(0, Number(state.game.daily.tierBonusGoldApplied) || 0);
-    const bonusDelta = bonusWanted - bonusApplied;
-
-    if (bonusDelta !== 0) {
-      applyDelta(0, bonusDelta);
-      logEvent("TIER_BONUS_ADJUST", {
-        dateKey,
-        objectivesCompleted,
-        tier,
-        goldDelta: bonusDelta,
-        bonusWanted,
-        bonusAppliedBefore: bonusApplied,
-      });
-    }
 
     state.game.daily.objectivesCompleted = objectivesCompleted;
     state.game.daily.tier = tier;
-    state.game.daily.tierBonusGoldApplied = bonusWanted;
     state.game.progress.lastTier = tier;
     return state.game.daily;
   }
@@ -1394,44 +1308,25 @@
     const prefix = `${safeDateKey}:`;
     return Object.entries(state.game.claims.rewardClaims).reduce((acc, [claimKey, claim]) => {
       if (!claimKey.startsWith(prefix)) return acc;
-      acc.xp += getClaimGrantedValue(claim, "xp");
-      acc.gold += getClaimGrantedValue(claim, "gold");
+      acc.xp += getClaimGrantedValue(claim);
       return acc;
-    }, { xp: 0, gold: 0 });
+    }, { xp: 0 });
   }
 
   function normalizeRewardClaimRecord(claim, claimKey) {
     if (!claim || typeof claim !== "object") return { changed: false, claim };
-    const xpGranted = getClaimGrantedValue(claim, "xp");
-    const goldGranted = getClaimGrantedValue(claim, "gold");
+    const xpGranted = getClaimGrantedValue(claim);
     const xpComputed = Math.max(xpGranted, Math.floor(Number(claim.xpComputed) || 0));
-    const goldComputed = Math.max(goldGranted, Math.floor(Number(claim.goldComputed) || 0));
-    const normalized = {
-      ...claim,
-      xp: xpGranted,
-      gold: goldGranted,
-      xpGranted,
-      goldGranted,
-      xpComputed,
-      goldComputed,
-    };
+    const normalized = { ...claim, xp: xpGranted, xpGranted, xpComputed };
     const changed = Number(claim.xp) !== xpGranted
-      || Number(claim.gold) !== goldGranted
       || Number(claim.xpGranted) !== xpGranted
-      || Number(claim.goldGranted) !== goldGranted
-      || Number(claim.xpComputed) !== xpComputed
-      || Number(claim.goldComputed) !== goldComputed;
+      || Number(claim.xpComputed) !== xpComputed;
     if (changed) {
       logEvent("CLAIM_CORRECTION", {
         claimKey,
         reason: "normalize_granted_reward",
-        before: {
-          xp: Number(claim.xp) || 0,
-          gold: Number(claim.gold) || 0,
-          xpGranted: Number(claim.xpGranted) || 0,
-          goldGranted: Number(claim.goldGranted) || 0,
-        },
-        after: { xp: xpGranted, gold: goldGranted, xpGranted, goldGranted, xpComputed, goldComputed },
+        before: { xp: Number(claim.xp) || 0, xpGranted: Number(claim.xpGranted) || 0 },
+        after: { xp: xpGranted, xpGranted, xpComputed },
       });
     }
     return { changed, claim: normalized };
@@ -1450,29 +1345,22 @@
   }
 
   function logCapSnapshot(dateKey, reason, actionId = null) {
-    const caps = getDailyCaps(state.game.level);
+    const caps = getDailyCaps();
     const totals = getDailyRewardTotals(dateKey);
     logEvent("CAP_RECALCULATED", {
       reason,
       actionId,
       dateKey,
       totalXpGranted: totals.xp,
-      totalGoldGranted: totals.gold,
       xpRemaining: Math.max(0, caps.capXpPerDay - totals.xp),
-      goldRemaining: Math.max(0, caps.capGoldPerDay - totals.gold),
       capXpPerDay: caps.capXpPerDay,
-      capGoldPerDay: caps.capGoldPerDay,
     });
   }
 
-  function getDailyCaps(level) {
-    const safeLevel = Math.max(1, Math.floor(Number(level) || 1));
-    const levelOffset = Math.max(0, safeLevel - 1);
-    const fallbackCaps = PROGRESSION_CONFIG.antiExploit?.caps || {};
-    const capXpPerDay = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase ?? fallbackCaps.capXpPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapPerLevel) || 0)) * levelOffset));
-    const capGoldPerDayRaw = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase ?? fallbackCaps.capGoldPerDay) || 0) + (Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapPerLevel) || 0)) * levelOffset));
-    const capGoldPerDay = isGoldEnabled() ? capGoldPerDayRaw : 0;
-    return { capXpPerDay, capGoldPerDay };
+  function getDailyCaps() {
+    const fallbackCap = PROGRESSION_CONFIG.antiExploit?.caps?.capXpPerDay ?? 200;
+    const capXpPerDay = Math.max(0, Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase ?? fallbackCap) || 0));
+    return { capXpPerDay };
   }
 
   function getDateKeyOffsetFromActive(offsetDays) {
@@ -1502,7 +1390,7 @@
     const potentialXp = visibleQuests.reduce((sum, quest) => sum + getRewardPreviewFromEffort(quest).xp, 0);
     const todayKey = getActiveDateIso();
     const todayTotals = getDailyRewardTotals(todayKey);
-    const dailyCaps = getDailyCaps(state.game.level);
+    const dailyCaps = getDailyCaps();
     const xpRemainingFromCap = Math.max(0, dailyCaps.capXpPerDay - todayTotals.xp);
     const maxXpToday = Math.max(0, Math.min(potentialXp, xpRemainingFromCap));
 
@@ -1566,22 +1454,17 @@
     };
   }
 
-  function applyDailyCaps(dateKey, xpWanted, goldWanted, level) {
-    const caps = getDailyCaps(level);
+  function applyDailyCaps(dateKey, xpWanted) {
+    const caps = getDailyCaps();
     const totals = getDailyRewardTotals(dateKey);
     const xpRemaining = Math.max(0, caps.capXpPerDay - totals.xp);
-    const goldRemaining = Math.max(0, caps.capGoldPerDay - totals.gold);
     const xpGranted = Math.max(0, Math.min(Math.max(0, Math.floor(Number(xpWanted) || 0)), xpRemaining));
-    const goldGranted = Math.max(0, Math.min(Math.max(0, Math.floor(Number(goldWanted) || 0)), goldRemaining));
     return {
       xpGranted,
-      goldGranted,
       xpRemaining,
-      goldRemaining,
       capXpPerDay: caps.capXpPerDay,
-      capGoldPerDay: caps.capGoldPerDay,
-      isCapReached: xpGranted === 0 && goldGranted === 0 && (xpWanted > 0 || goldWanted > 0),
-      isPartial: xpGranted < xpWanted || goldGranted < goldWanted,
+      isCapReached: xpGranted === 0 && xpWanted > 0,
+      isPartial: xpGranted < xpWanted,
     };
   }
 
@@ -1590,33 +1473,19 @@
     const effort = sanitizeEffort(habit?.effort, habit?.xp);
     const tableIndex = clamp(effort - 1, 0, effortScale.max - 1);
     const xpTable = Array.isArray(ECONOMY_CONFIG.effortXpTable) ? ECONOMY_CONFIG.effortXpTable : [];
-
     const xpComputed = Math.max(0, Math.round(Number(xpTable[tableIndex]) || 0));
-    const goldRatio = Math.max(0, Number(ECONOMY_CONFIG.goldFromXpRatio ?? ECONOMY_CONFIG.goldRatio) || 0);
-    const goldComputedRaw = Math.max(0, Math.round(xpComputed * goldRatio));
-    const goldComputed = isGoldEnabled() ? goldComputedRaw : 0;
-
-    const capResult = applyDailyCaps(dateKey, xpComputed, goldComputed, gameState?.level);
-    const preview = options?.preview === true;
+    const capResult = applyDailyCaps(dateKey, xpComputed);
     const xpGranted = capResult.xpGranted;
-    const goldGranted = capResult.goldGranted;
-
     return {
       xpComputed,
-      goldComputed,
       xpGranted,
-      goldGranted,
       xp: xpGranted,
-      gold: goldGranted,
       meta: {
         effort,
-        preview,
+        preview: options?.preview === true,
         xpComputed,
-        goldComputed,
         xpRemainingBeforeClaim: capResult.xpRemaining,
-        goldRemainingBeforeClaim: capResult.goldRemaining,
         capXpPerDay: capResult.capXpPerDay,
-        capGoldPerDay: capResult.capGoldPerDay,
         isCapReached: capResult.isCapReached,
         isPartial: capResult.isPartial,
       },
@@ -1629,9 +1498,7 @@
     const index = clamp(effort - 1, 0, effortScale.max - 1);
     const xpTable = Array.isArray(ECONOMY_CONFIG.effortXpTable) ? ECONOMY_CONFIG.effortXpTable : [];
     const xp = Math.max(0, Math.round(Number(xpTable[index]) || 0));
-    const goldRatio = Math.max(0, Number(ECONOMY_CONFIG.goldFromXpRatio ?? ECONOMY_CONFIG.goldRatio) || 0);
-    const gold = isGoldEnabled() ? Math.max(0, Math.round(xp * goldRatio)) : 0;
-    return { xp, gold };
+    return { xp };
   }
 
   function getEffortLabel(effort) {
@@ -1660,9 +1527,7 @@
       ui.refs.editorEffortLabel.textContent = `${effort}/${scale.max} • ${getEffortLabel(effort)}`;
     }
     if (ui.refs.editorRewardPreview) {
-      ui.refs.editorRewardPreview.textContent = ECONOMY_CONFIG.goldEnabled === false
-        ? `Gains effectifs : +${reward.xp} XP`
-        : `Gains effectifs : ${formatRewardText(reward.xp, reward.gold, true)}`;
+      ui.refs.editorRewardPreview.textContent = `Gains effectifs : +${reward.xp} XP`;
     }
 
     const ratio = ((effort - scale.min) / Math.max(1, scale.max - scale.min)) * 100;
@@ -1832,7 +1697,7 @@
     if (!chestTier) return { ok: false, reason: 'no_chest' };
     weekly.chestClaimed = true;
     state.game.claims.chestClaims[weekly.weekKey] = { claimedAt: new Date().toISOString(), chestTierId: chestTier.id };
-    applyDelta(Math.max(0, Number(chestTier.bonusXp) || 0), Math.max(0, Number(chestTier.bonusGold) || 0));
+    applyDelta(Math.max(0, Number(chestTier.bonusXp) || 0));
     logEvent('WEEK_CHEST_CLAIMED', { weekKey: weekly.weekKey, chestTierId: chestTier.id });
     return { ok: true, chestTier };
   }
@@ -1898,7 +1763,6 @@
     state.game.daily.dateKey = activeDate;
     state.game.daily.objectivesCompleted = 0;
     state.game.daily.tier = "none";
-    state.game.daily.tierBonusGoldApplied = 0;
     state.game.daily.vacationMode = false;
     storage.saveState(state.game);
   }
@@ -1930,29 +1794,17 @@
     }
   }
 
-  function computeLevelUpReward(fromLevel, toLevel) {
-    let totalBonus = 0;
-    for (let level = fromLevel + 1; level <= toLevel; level += 1) {
-      totalBonus += PROGRESSION.LEVEL_UP_GOLD_BASE_BONUS + (level - 1) * PROGRESSION.LEVEL_UP_GOLD_PER_LEVEL;
-    }
-    return totalBonus;
-  }
-
-  function applyDelta(xpDelta, goldDelta) {
+  function applyDelta(xpDelta) {
     const beforeLevel = Math.max(1, Number(state.game.level) || 1);
     const safeXpDelta = Math.floor(Number(xpDelta) || 0);
-    const safeGoldDelta = isGoldEnabled() ? Math.floor(Number(goldDelta) || 0) : 0;
     state.game.xp = Math.max(0, state.game.xp + safeXpDelta);
-    state.game.gold = Math.max(0, state.game.gold + safeGoldDelta);
     state.game.totalXp = Math.max(0, Math.floor(Number(state.game.totalXp) || 0) + safeXpDelta);
     syncTotalXpNonDestructive();
     const progress = computeLevelProgress(state.game.totalXp);
     const nextLevel = Math.max(beforeLevel, progress.level);
     if (nextLevel > beforeLevel) {
-      const bonus = isGoldEnabled() ? computeLevelUpReward(beforeLevel, nextLevel) : 0;
-      state.game.gold += bonus;
-      ui.showToast("success", "Level up", isGoldEnabled() ? `Niveau ${nextLevel} atteint • +${bonus} Gold` : `Niveau ${nextLevel} atteint !`);
-      ui.showLevelUpOverlay(nextLevel, bonus);
+      ui.showToast("success", "Level up", `Niveau ${nextLevel} atteint !`);
+      ui.showLevelUpOverlay(nextLevel);
       document.body.classList.remove("levelup-spark");
       if (!prefersReducedMotion()) {
         void document.body.offsetWidth;
@@ -1965,7 +1817,6 @@
     state.game.level = nextLevel;
     state.game.currencies.xp = state.game.xp;
     state.game.currencies.totalXp = state.game.totalXp;
-    state.game.currencies.gold = state.game.gold;
     state.game.progress.level = state.game.level;
   }
 
@@ -1978,41 +1829,35 @@
     const existingClaim = state.game.claims.rewardClaims[claimKey];
 
     if (!actionId || !dateKey) {
-      return { applied: false, xpDelta: 0, goldDelta: 0, reason: "invalid_input" };
+      return { applied: false, xpDelta: 0, reason: "invalid_input" };
     }
 
     if (mode === "claim") {
       if (existingClaim) {
-        return { applied: false, xpDelta: 0, goldDelta: 0, reason: "already_claimed" };
+        return { applied: false, xpDelta: 0, reason: "already_claimed" };
       }
 
       const reward = computeEffectiveReward(params?.habit, state.game, dateKey);
       const xpGain = Math.max(0, Math.floor(Number(reward.xpGranted) || 0));
-      const goldGain = Math.max(0, Math.floor(Number(reward.goldGranted) || 0));
 
       state.game.claims.rewardClaims[claimKey] = {
         claimedAt: new Date().toISOString(),
         ts: new Date().toISOString(),
         xp: xpGain,
-        gold: goldGain,
         xpGranted: xpGain,
-        goldGranted: goldGain,
         xpComputed: reward.xpComputed,
-        goldComputed: reward.goldComputed,
       };
 
       const normalizedNewClaim = normalizeRewardClaimRecord(state.game.claims.rewardClaims[claimKey], claimKey);
       if (normalizedNewClaim.changed) {
         state.game.claims.rewardClaims[claimKey] = normalizedNewClaim.claim;
       }
-      applyDelta(xpGain, goldGain);
+      applyDelta(xpGain);
       logEvent("CLAIM_REWARD", {
         actionId,
         dateKey,
         xpDelta: xpGain,
-        goldDelta: goldGain,
         xpComputed: reward.meta.xpComputed,
-        goldComputed: reward.meta.goldComputed,
         effort: reward.meta.effort,
       });
 
@@ -2021,11 +1866,8 @@
           actionId,
           dateKey,
           xpComputed: reward.meta.xpComputed,
-          goldComputed: reward.meta.goldComputed,
           xpGranted: xpGain,
-          goldGranted: goldGain,
           capXpPerDay: reward.meta.capXpPerDay,
-          capGoldPerDay: reward.meta.capGoldPerDay,
         });
       }
       logCapSnapshot(dateKey, "claim", actionId);
@@ -2033,13 +1875,12 @@
       return {
         applied: true,
         xpDelta: xpGain,
-        goldDelta: goldGain,
         reason: reward.meta.isCapReached ? "cap_reached" : (reward.meta.isPartial ? "claim_partial" : "claimed"),
       };
     }
 
     if (!existingClaim) {
-      return { applied: false, xpDelta: 0, goldDelta: 0, reason: "missing_claim" };
+      return { applied: false, xpDelta: 0, reason: "missing_claim" };
     }
 
     const normalizedExisting = normalizeRewardClaimRecord(existingClaim, claimKey);
@@ -2047,18 +1888,17 @@
       state.game.claims.rewardClaims[claimKey] = normalizedExisting.claim;
     }
 
-    const xpRollback = getClaimGrantedValue(state.game.claims.rewardClaims[claimKey], "xp");
-    const goldRollback = getClaimGrantedValue(state.game.claims.rewardClaims[claimKey], "gold");
-    applyDelta(-xpRollback, -goldRollback);
+    const xpRollback = getClaimGrantedValue(state.game.claims.rewardClaims[claimKey]);
+    applyDelta(-xpRollback);
     delete state.game.claims.rewardClaims[claimKey];
-    logEvent("ROLLBACK_REWARD", { actionId, dateKey, xpDelta: -xpRollback, goldDelta: -goldRollback });
+    logEvent("ROLLBACK_REWARD", { actionId, dateKey, xpDelta: -xpRollback });
 
-    if (xpRollback > 0 || goldRollback > 0) {
-      logEvent("ROLLBACK_PARTIAL", { actionId, dateKey, xpRolledBack: xpRollback, goldRolledBack: goldRollback });
+    if (xpRollback > 0) {
+      logEvent("ROLLBACK_PARTIAL", { actionId, dateKey, xpRolledBack: xpRollback });
     }
     logCapSnapshot(dateKey, "rollback", actionId);
 
-    return { applied: true, xpDelta: -xpRollback, goldDelta: -goldRollback, reason: "rolled_back" };
+    return { applied: true, xpDelta: -xpRollback, reason: "rolled_back" };
   }
 
   function applyQuestToggle(params) {
@@ -2110,7 +1950,7 @@
     if (!result.sideEffects.nextCompleted) {
       ui.lastCompletedQuestId = null;
       if (result.rewardResult?.applied) {
-        ui.showToast("info", "Quête annulée", formatRewardText(result.rewardResult.xpDelta, result.rewardResult.goldDelta, false));
+        ui.showToast("info", "Quête annulée", formatRewardText(result.rewardResult.xpDelta, false));
       }
       haptics.undo();
     } else {
@@ -2121,9 +1961,9 @@
           haptics.error();
           audioFx.play("pop");
         } else if (result.rewardResult.reason === "claim_partial") {
-          ui.showToast("info", "Quête validée (cap)", formatRewardText(result.rewardResult.xpDelta, result.rewardResult.goldDelta, true));
+          ui.showToast("info", "Quête validée (cap)", formatRewardText(result.rewardResult.xpDelta, true));
         } else {
-          ui.showToast("success", "Quête validée", formatRewardText(result.rewardResult.xpDelta, result.rewardResult.goldDelta, true));
+          ui.showToast("success", "Quête validée", formatRewardText(result.rewardResult.xpDelta, true));
         }
       } else if (result.rewardResult?.reason === "already_claimed") {
         ui.showToast("info", "Déjà récupérée", "Récompense déjà récupérée aujourd'hui.");
@@ -2202,31 +2042,13 @@
   }
 
   function renderRewardChips(reward) {
-    const safeReward = reward && typeof reward === "object" ? reward : { xp: 0, gold: 0 };
-    const xpChip = `<span class="chip chip-xp">+${Math.max(0, Math.floor(Number(safeReward.xp) || 0))} XP</span>`;
-    if (!isGoldEnabled()) return xpChip;
-    const gold = Math.max(0, Math.floor(Number(safeReward.gold) || 0));
-    return `${xpChip}<span class="chip chip-gold">+${gold} Gold</span>`;
-  }
-
-  function applyGoldVisibility() {
-    const goldVisible = isGoldEnabled();
-    if (ui.refs.goldStatCard) ui.refs.goldStatCard.hidden = !goldVisible;
-    if (ui.refs.economyGoldCapRow) ui.refs.economyGoldCapRow.hidden = !goldVisible;
-    if (ui.refs.goldSortOption) ui.refs.goldSortOption.hidden = !goldVisible;
-    if (!goldVisible && ui.createSort === "goldDesc") {
-      ui.createSort = "recent";
-      state.createUi.sort = "recent";
-      storage.saveCreateUi(state.createUi);
-      if (ui.refs.sortSelect) ui.refs.sortSelect.value = "recent";
-    }
+    const safeReward = reward && typeof reward === "object" ? reward : { xp: 0 };
+    return `<span class="chip chip-xp">+${Math.max(0, Math.floor(Number(safeReward.xp) || 0))} XP</span>`;
   }
 
   function renderStats() {
     ui.refs.xp.textContent = String(state.game.xp);
-    if (ui.refs.gold) ui.refs.gold.textContent = String(state.game.gold);
     ui.refs.levelBadge.textContent = `Lv ${state.game.level}`;
-    applyGoldVisibility();
 
     const levelProgress = computeLevelProgressAtLevel(state.game.totalXp, state.game.level);
     const safeRatio = clamp(Number(levelProgress.ratio) || 0, 0, 1);
@@ -2466,9 +2288,6 @@
       section.hidden = !state.settings.advancedModeEnabled;
     });
 
-    applyGoldVisibility();
-    if (ui.refs.economyGoldToggle) ui.refs.economyGoldToggle.checked = isGoldEnabled();
-    if (ui.refs.economyGoldState) ui.refs.economyGoldState.textContent = isGoldEnabled() ? "ON" : "OFF";
     const capRanges = getEconomyCapRanges();
     ui.refs.economyXpCapRange.min = String(capRanges.xp.min);
     ui.refs.economyXpCapRange.max = String(capRanges.xp.max);
@@ -2476,15 +2295,6 @@
     ui.refs.economyXpCapRange.value = String(Math.floor(Number(ECONOMY_CONFIG.dailyXpCapBase) || capRanges.xp.min));
     ui.refs.economyXpCapValue.textContent = `${ui.refs.economyXpCapRange.value} XP`;
     ui.refs.economyXpCapRange.style.setProperty("--range-progress", `${((Number(ui.refs.economyXpCapRange.value) - capRanges.xp.min) / Math.max(1, capRanges.xp.max - capRanges.xp.min)) * 100}%`);
-
-    if (ui.refs.economyGoldCapRange && ui.refs.economyGoldCapValue) {
-      ui.refs.economyGoldCapRange.min = String(capRanges.gold.min);
-      ui.refs.economyGoldCapRange.max = String(capRanges.gold.max);
-      ui.refs.economyGoldCapRange.step = String(capRanges.gold.step);
-      ui.refs.economyGoldCapRange.value = String(Math.floor(Number(ECONOMY_CONFIG.dailyGoldCapBase) || capRanges.gold.min));
-      ui.refs.economyGoldCapValue.textContent = `${ui.refs.economyGoldCapRange.value} Gold`;
-      ui.refs.economyGoldCapRange.style.setProperty("--range-progress", `${((Number(ui.refs.economyGoldCapRange.value) - capRanges.gold.min) / Math.max(1, capRanges.gold.max - capRanges.gold.min)) * 100}%`);
-    }
 
     const activePreset = typeof ECONOMY_CONFIG.smoothingPreset === "string" ? ECONOMY_CONFIG.smoothingPreset : getConfiguredDefaultPreset();
     ui.refs.economyPresetButtons.forEach((button) => {
@@ -2799,7 +2609,7 @@
     const effort = sanitizeEffort(ui.refs.editorEffort.value);
     const reward = computeEffectiveReward({ effort }, state.game, getActiveDateIso(), { preview: true });
     if (title.length < 2 || title.length > 40) return { error: "Le nom doit faire entre 2 et 40 caractères." };
-    return { value: { title, effort, xp: reward.xp, gold: reward.gold, icon: ui.editor.icon } };
+    return { value: { title, effort, xp: reward.xp, icon: ui.editor.icon } };
   }
 
   function saveEditor() {
@@ -3358,16 +3168,6 @@
       audioFx.play("pop");
     });
 
-    ui.refs.economyGoldToggle?.addEventListener("change", () => {
-      state.settings.economyOverrides.goldEnabled = isGoldFeatureEnabled() && ui.refs.economyGoldToggle.checked;
-      state.settings.economy.goldEnabled = isGoldFeatureEnabled() && ui.refs.economyGoldToggle.checked;
-      applyEconomySettingsToConfig(state.settings);
-      storage.saveSettings(state.settings);
-      renderAllTabs();
-      const message = isGoldEnabled() ? "Gold réactivé." : "Gold désactivé (gains à 0).";
-      ui.showToast("info", "Économie", message);
-    });
-
     ui.refs.economyXpCapRange.addEventListener("input", () => {
       const ranges = getEconomyCapRanges();
       const next = clamp(Math.floor(Number(ui.refs.economyXpCapRange.value) || 0), ranges.xp.min, ranges.xp.max);
@@ -3381,19 +3181,6 @@
       renderEconomyAuditSection();
     });
 
-    ui.refs.economyGoldCapRange?.addEventListener("input", () => {
-      if (!ui.refs.economyGoldCapValue) return;
-      const ranges = getEconomyCapRanges();
-      const next = clamp(Math.floor(Number(ui.refs.economyGoldCapRange.value) || 0), ranges.gold.min, ranges.gold.max);
-      ui.refs.economyGoldCapRange.value = String(next);
-      ui.refs.economyGoldCapValue.textContent = `${next} Gold`;
-      ui.refs.economyGoldCapRange.style.setProperty("--range-progress", `${((next - ranges.gold.min) / Math.max(1, ranges.gold.max - ranges.gold.min)) * 100}%`);
-      state.settings.economyOverrides.dailyGoldCapBase = next;
-      state.settings.economy.dailyGoldCap = next;
-      applyEconomySettingsToConfig(state.settings);
-      storage.saveSettings(state.settings);
-    });
-
     ui.refs.economyPresetButtons.forEach((button) => {
       button.addEventListener("click", () => {
         const presetKey = button.dataset.economyPreset;
@@ -3401,7 +3188,6 @@
         if (!preset) return;
         const overrides = state.settings.economyOverrides;
         if (preset.dailyXpCapBase !== undefined) overrides.dailyXpCapBase = preset.dailyXpCapBase;
-        if (preset.dailyGoldCapBase !== undefined) overrides.dailyGoldCapBase = preset.dailyGoldCapBase;
         overrides.smoothingPreset = presetKey;
         applyEconomySettingsToConfig(state.settings);
         storage.saveSettings(state.settings);
@@ -3542,7 +3328,7 @@
     ui.refs.claimWeeklyChestBtn?.addEventListener("click", () => {
       const result = claimWeeklyChestReward();
       if (result.ok) {
-        ui.showToast("success", "Coffre hebdo", `${result.chestTier.id} ouvert : ${formatRewardText(result.chestTier.bonusXp, result.chestTier.bonusGold, true)}`);
+        ui.showToast("success", "Coffre hebdo", `${result.chestTier.id} ouvert : ${formatRewardText(result.chestTier.bonusXp, true)}`);
         haptics.complete();
         audioFx.play("coin");
       } else if (result.reason === "already_claimed") {
